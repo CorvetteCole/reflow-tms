@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" remoteFilesAllowedToDisappearOnAutoupload="false">
+    <serverData>
+      <paths name="RHEL (77f83ff1-8d2b-4a6b-8b2e-39e2501db8e1)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/HID/src" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/Wire/src" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/SPI/src" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="Raspberry (0964d3ea-bc36-4f5d-a464-810b34a0a4ac)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/HID/src" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/Wire/src" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/SPI/src" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="paul (22d1308f-6290-4c68-848c-42f65f61299f)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/HID/src" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/Wire/src" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/SPI/src" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="ubuntu-vm (c4c3e0ed-e850-4f1c-a4bb-3db49e2071ae)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/HID/src" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/Wire/src" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/SPI/src" web="/" />
+            <mapping local="$USER_HOME$/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+  </component>
+</project>
