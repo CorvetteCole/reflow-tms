@@ -6,7 +6,7 @@
 void Logger::debug(const char *message) { log(LogLevel::DEBUG, message); }
 void Logger::info(const char *message) { log(LogLevel::INFO, message); }
 void Logger::warn(const char *message) { log(LogLevel::WARN, message); }
-void Logger::error(const char *message) { log(LogLevel::ERROR, message); }
+void Logger::error(const char *message) { log(LogLevel::CRITICAL, message); }
 void Logger::log(LogLevel severity, const char *message) {
   if (severity >= logLevel) {
     // build json object, use length of message and log level
@@ -15,7 +15,7 @@ void Logger::log(LogLevel severity, const char *message) {
     const char *severityString = logLevelToString(severity);
     strlen(severityString) + strlen(message);
 
-    DynamicJsonDocument logJson(1024);
+    DynamicJsonDocument logJson(256);
     logJson["action"] = "log";
     logJson["time"] = millis();
     logJson["severity"] = severityString;
@@ -33,8 +33,8 @@ char const *Logger::logLevelToString(LogLevel severity) {
     return "INFO";
   case WARN:
     return "WARN";
-  case ERROR:
-    return "ERROR";
+  case CRITICAL:
+    return "CRITICAL";
   }
   return "UNKNOWN";
 }

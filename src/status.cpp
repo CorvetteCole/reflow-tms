@@ -10,16 +10,16 @@ DynamicJsonDocument Status::toJson() const volatile {
   statusJson["error"] = error;
   // convert state enum value to string
   switch (state) {
-  case State::idle:
-    statusJson["state"] = "idle";
+  case State::IDLE:
+    statusJson["state"] = "IDLE";
     break;
-  case State::heating:
-    statusJson["state"] = "heating";
+  case State::HEATING:
+    statusJson["state"] = "HEATING";
     break;
-  case State::cooling:
-    statusJson["state"] = "cooling";
+  case State::COOLING:
+    statusJson["state"] = "COOLING";
     break;
-  case State::error:
+  case State::ERROR:
     statusJson["state"] = "error";
     break;
   }

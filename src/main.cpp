@@ -48,10 +48,17 @@ void immediateStop() {
   status.bottomHeatDutyCycle = 0;
 }
 
+void sendStatus() {
+  // TODO attach to timer
+  serializeJson(status.toJson(), Serial);
+}
+
 void enterErrorState(const char *error) {
   strcpy(status.error, error);
-  status.state = State::error;
+  status.state = State::ERROR;
+  logger.error(error);
   immediateStop();
+  sendStatus(); // immediately update status
 }
 
 void doorChanged() {
@@ -59,18 +66,9 @@ void doorChanged() {
   Serial.print("Door open: ");
   Serial.println(status.isDoorOpen);
 
-  if (status.state == heating && status.isDoorOpen) {
-    enterErrorState("Door opened during heating");
+  if (status.state == HEATING && status.isDoorOpen) {
+    enterErrorState("Door opened during HEATING");
   }
-}
-
-void sendStatus() {
-  // TODO attach to timer
-  serializeJson(status.toJson(), Serial);
-}
-
-void sendLogMessage(const char *message, ) {
-  // TODO
 }
 
 void setup() {
@@ -96,7 +94,7 @@ void setup() {
   pinMode(DOOR_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(DOOR_PIN), doorChanged, CHANGE);
 
-  // initialize both heating element PWM interfaces, set duty cycle to 0
+  // initialize both HEATING element PWM interfaces, set duty cycle to 0
   heatingElementPwm.setPWM(TOP_HEATING_ELEMENT_PIN,
                            HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.setPWM(BOTTOM_HEATING_ELEMENT_PIN,
@@ -140,10 +138,10 @@ uint8_t lastBottomHeatDutyCycle = 0;
 
 void loop() {
   readTemperature();
-  if (status.state == State::error) {
-    // make sure heating elements are off
+  if (status.state == State::ERROR) {
+    // make sure HEATING elements are off
     if (status.topHeatDutyCycle != 0 || status.bottomHeatDutyCycle != 0) {
-      sendLogMessage(
+      logger.warn(
           "Heating elements should be off already! Turning off now...");
       immediateStop();
     }
@@ -153,7 +151,7 @@ void loop() {
   }
 
   if (status.targetTemperature == 0) {
-    status.state = idle;
+    status.state = IDLE;
     topHeatingElementPid.SetMode(QuickPID::Control::manual);
     topHeatingElementPid.Reset();
     bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
@@ -163,15 +161,15 @@ void loop() {
     heatingElementPwm.disableAll(); // disable timers while we aren't using them
   } else if (status.currentTemperature > status.targetTemperature &&
              status.currentTemperature - status.targetTemperature > 5) {
-    status.state = cooling;
+    status.state = COOLING;
     bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);
   } else if (status.targetTemperature > status.currentTemperature &&
              status.targetTemperature - status.currentTemperature > 5) {
-    status.state = heating;
+    status.state = HEATING;
     bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);
   }
 
-  if (status.state != idle) {
+  if (status.state != IDLE) {
     heatingElementPwm.enableAll();
     pidTargetTemperature = status.targetTemperature;
     pidCurrentTemperature = status.currentTemperature;
@@ -204,7 +202,7 @@ void loop() {
 //   heatingElementPwm.enableAll();
 //
 //   for (int i = 0; i <= 100; i++) {
-//     Serial.print("Setting heating elements PWM duty cycle to ");
+//     Serial.print("Setting HEATING elements PWM duty cycle to ");
 //     Serial.print(i);
 //     Serial.println("%");
 //     heatingElementPwm.modifyPWMChannel(0, heatingElementPwmPins[0],
@@ -216,7 +214,7 @@ void loop() {
 //     delay(100);
 //   }
 //   delay(5000);
-//   Serial.println("Disabling all heating elements");
+//   Serial.println("Disabling all HEATING elements");
 //   heatingElementPwm.modifyPWMChannel(0, heatingElementPwmPins[0],
 //                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
 //   heatingElementPwm.modifyPWMChannel(1, heatingElementPwmPins[1],

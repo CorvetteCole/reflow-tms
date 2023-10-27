@@ -8,7 +8,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-enum LogLevel { DEBUG = 0, INFO = 1, WARN = 2, ERROR = 3 };
+enum LogLevel { DEBUG = 0, INFO = 1, WARN = 2, CRITICAL = 3 };
 
 class Logger {
 
