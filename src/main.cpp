@@ -33,7 +33,7 @@ Adafruit_MAX31865 max31865 = Adafruit_MAX31865(CS_PIN, DI_PIN, DO_PIN, CLK_PIN);
 
 Logger logger = Logger(LogLevel::DEBUG);
 
-void timerHandler() { heatingElementPwm.run(); }
+void pwmTimerHandler() { heatingElementPwm.run(); }
 
 void immediateStop() {
   heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
@@ -48,10 +48,7 @@ void immediateStop() {
   status.bottomHeatDutyCycle = 0;
 }
 
-void sendStatus() {
-  // TODO attach to timer
-  serializeJson(status.toJson(), Serial);
-}
+void sendStatus() { serializeJson(status.toJson(), Serial); }
 
 void enterErrorState(const char *error) {
   strcpy(status.error, error);
@@ -63,13 +60,18 @@ void enterErrorState(const char *error) {
 
 void doorChanged() {
   status.isDoorOpen = digitalRead(DOOR_PIN);
-  Serial.print("Door open: ");
-  Serial.println(status.isDoorOpen);
+  if (status.isDoorOpen) {
+    logger.info("Door opened");
+  } else {
+    logger.info("Door closed");
+  }
 
   if (status.state == HEATING && status.isDoorOpen) {
     enterErrorState("Door opened during HEATING");
   }
 }
+
+void (*resetFunc)() = nullptr;
 
 void setup() {
   Serial.begin(115200);
@@ -81,7 +83,7 @@ void setup() {
 
   ITimer1.init();
 
-  if (ITimer1.attachInterrupt(HW_TIMER_INTERVAL_FREQ, timerHandler)) {
+  if (ITimer1.attachInterrupt(HW_TIMER_INTERVAL_FREQ, pwmTimerHandler)) {
     logger.debug("Starting  ITimer1 OK");
   } else {
     logger.error("Can't set ITimer1 correctly. Select another freq. or timer");
@@ -92,7 +94,10 @@ void setup() {
 
   // initialize door sensor pin as an input
   pinMode(DOOR_PIN, INPUT_PULLUP);
+  pinMode(RESET_PIN, INPUT_PULLUP);
+
   attachInterrupt(digitalPinToInterrupt(DOOR_PIN), doorChanged, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(RESET_PIN), resetFunc, RISING);
 
   // initialize both HEATING element PWM interfaces, set duty cycle to 0
   heatingElementPwm.setPWM(TOP_HEATING_ELEMENT_PIN,
@@ -133,16 +138,95 @@ void readTemperature() {
   // TODO check if reading was reasonable
 }
 
+char receivedChars[INPUT_BUFFER_SIZE];
+bool newData = false;
+
+bool receiveCommand() {
+  static bool receiveInProgress = false;
+
+  static byte ndx = 0;
+  char startMarker = '{';
+  char endMarker = '}';
+  char rc;
+
+  while (Serial.available() > 0 && !newData) {
+    rc = Serial.read();
+
+    if (receiveInProgress) {
+      if (rc != endMarker) {
+        receivedChars[ndx] = rc;
+        ndx++;
+        if (ndx >= INPUT_BUFFER_SIZE) {
+          ndx = INPUT_BUFFER_SIZE - 1;
+        }
+      } else {
+        receivedChars[ndx] = '\0'; // terminate the string
+        receiveInProgress = false;
+        ndx = 0;
+        return true;
+      }
+    } else if (rc == startMarker) {
+      receiveInProgress = true;
+    }
+  }
+  return false;
+}
+
 uint8_t lastTopHeatDutyCycle = 0;
 uint8_t lastBottomHeatDutyCycle = 0;
+uint32_t lastUiHeartbeat = 0;
 
 void loop() {
+  static StaticJsonDocument<32> commandJson;
+
+  if (receiveCommand()) {
+    lastUiHeartbeat = millis();
+
+    // Deserialize the JSON document
+    DeserializationError error = deserializeJson(commandJson, receivedChars);
+
+    // Test if parsing succeeds.
+    if (error) {
+      logger.warn("Could not parse command");
+      logger.warn(error.c_str());
+    } else {
+      // check if "action" is present
+      if (commandJson.containsKey("targetTemperature")) {
+        int targetTemperature = commandJson["targetTemperature"];
+        if (targetTemperature < 0 ||
+            targetTemperature > MAX_TARGET_TEMPERATURE) {
+          logger.warn("Invalid target temperature");
+        } else {
+          status.targetTemperature = targetTemperature;
+        }
+      }
+
+      if (commandJson.containsKey("logLevel")) {
+        const char *logLevel = commandJson["logLevel"];
+        if (strcasecmp(logLevel, "DEBUG") == 0) {
+          logger.logLevel = LogLevel::DEBUG;
+        } else if (strcasecmp(logLevel, "INFO") == 0) {
+          logger.logLevel = LogLevel::INFO;
+        } else if (strcasecmp(logLevel, "WARN") == 0) {
+          logger.logLevel = LogLevel::WARN;
+        } else if (strcasecmp(logLevel, "CRITICAL") == 0) {
+          logger.logLevel = LogLevel::CRITICAL;
+        } else {
+          logger.warn("Invalid log level");
+        }
+      }
+
+      newData = false;
+    }
+  } else if (millis() - lastUiHeartbeat > UI_TIMEOUT) {
+    enterErrorState("UI timeout");
+  }
+
   readTemperature();
   if (status.state == State::ERROR) {
     // make sure HEATING elements are off
     if (status.topHeatDutyCycle != 0 || status.bottomHeatDutyCycle != 0) {
-      logger.warn(
-          "Heating elements should be off already! Turning off now...");
+      logger.warn("Heating elements should be off already! Turning off now...");
       immediateStop();
     }
 

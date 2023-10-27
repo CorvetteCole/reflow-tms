@@ -1,7 +1,7 @@
 #include "status.h"
 
 DynamicJsonDocument Status::toJson() const volatile {
-  DynamicJsonDocument statusJson(1024);
+  DynamicJsonDocument statusJson(192);
   statusJson["targetTemperature"] = targetTemperature;
   statusJson["currentTemperature"] = currentTemperature;
   statusJson["topHeatDutyCycle"] = topHeatDutyCycle;
@@ -20,9 +20,8 @@ DynamicJsonDocument Status::toJson() const volatile {
     statusJson["state"] = "COOLING";
     break;
   case State::ERROR:
-    statusJson["state"] = "error";
+    statusJson["state"] = "ERROR";
     break;
   }
-  statusJson["isDiagnosticMode"] = isDiagnosticMode;
   return statusJson;
 }

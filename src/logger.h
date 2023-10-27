@@ -13,15 +13,16 @@ enum LogLevel { DEBUG = 0, INFO = 1, WARN = 2, CRITICAL = 3 };
 class Logger {
 
 public:
-  void debug(const char *message);
+  LogLevel logLevel = INFO;
+  void debug(const char *message) const;
 
-  void info(const char *message);
+  void info(const char *message) const;
 
-  void warn(const char *message);
+  void warn(const char *message) const;
 
-  void error(const char *message);
+  void error(const char *message) const;
 
-  void log(LogLevel severity, const char *message);
+  void log(LogLevel severity, const char *message) const;
 
   explicit Logger(LogLevel logLevel) : logLevel(logLevel) {}
 
@@ -29,8 +30,6 @@ public:
 
 private:
   static char const *logLevelToString(LogLevel severity);
-
-  LogLevel logLevel = INFO;
 };
 
 #endif // REFLOW_TMS_LOGGER_H

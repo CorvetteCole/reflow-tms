@@ -3,22 +3,17 @@
 //
 
 #include "logger.h"
-void Logger::debug(const char *message) { log(LogLevel::DEBUG, message); }
-void Logger::info(const char *message) { log(LogLevel::INFO, message); }
-void Logger::warn(const char *message) { log(LogLevel::WARN, message); }
-void Logger::error(const char *message) { log(LogLevel::CRITICAL, message); }
-void Logger::log(LogLevel severity, const char *message) {
+void Logger::debug(const char *message) const { log(LogLevel::DEBUG, message); }
+void Logger::info(const char *message) const { log(LogLevel::INFO, message); }
+void Logger::warn(const char *message) const { log(LogLevel::WARN, message); }
+void Logger::error(const char *message) const { log(LogLevel::CRITICAL, message); }
+void Logger::log(LogLevel severity, const char *message) const {
   if (severity >= logLevel) {
     // build json object, use length of message and log level
-
-    // TODO use length of message and log level to make sure we don't overflow
-    const char *severityString = logLevelToString(severity);
-    strlen(severityString) + strlen(message);
-
-    DynamicJsonDocument logJson(256);
+    StaticJsonDocument<256> logJson;
     logJson["action"] = "log";
     logJson["time"] = millis();
-    logJson["severity"] = severityString;
+    logJson["severity"] = logLevelToString(severity);
     logJson["message"] = message;
 
     serializeJson(logJson, Serial);

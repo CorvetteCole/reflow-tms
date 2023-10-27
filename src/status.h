@@ -14,7 +14,6 @@ public:
   bool isDoorOpen = false;
   char *error = nullptr;
   State state = IDLE;
-  bool isDiagnosticMode = false;
 
   DynamicJsonDocument toJson() const volatile;
 };
