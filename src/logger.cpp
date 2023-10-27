@@ -17,6 +17,7 @@ void Logger::log(LogLevel severity, const char *message) {
 
     DynamicJsonDocument logJson(1024);
     logJson["action"] = "log";
+    logJson["time"] = millis();
     logJson["severity"] = severityString;
     logJson["message"] = message;
 
