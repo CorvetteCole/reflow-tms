@@ -30,6 +30,7 @@
 #define RNOMINAL 100.0
 
 #define UI_TIMEOUT 250 // in milliseconds
+#define STATUS_SEND_INTERVAL 100 // ms
 
 // enum Error {
 //   doorOpenedDuringHeating,

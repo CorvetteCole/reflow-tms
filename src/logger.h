@@ -16,13 +16,23 @@ public:
   LogLevel logLevel = INFO;
   void debug(const char *message) const;
 
+  void debug(const __FlashStringHelper *message) const;
+
   void info(const char *message) const;
+
+  void info(const __FlashStringHelper *message) const;
 
   void warn(const char *message) const;
 
+  void warn(const __FlashStringHelper *message) const;
+
   void error(const char *message) const;
 
+  void error(const __FlashStringHelper *message) const;
+
   void log(LogLevel severity, const char *message) const;
+
+  void log(LogLevel severity, const __FlashStringHelper *message) const;
 
   explicit Logger(LogLevel logLevel) : logLevel(logLevel) {}
 

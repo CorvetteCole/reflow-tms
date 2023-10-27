@@ -58,6 +58,14 @@ void enterErrorState(const char *error) {
   sendStatus(); // immediately update status
 }
 
+void enterErrorState(const __FlashStringHelper *error) {
+  strcpy_P(status.error, (const char *)error);
+  status.state = State::ERROR;
+  logger.error((const char *)error);
+  immediateStop();
+  sendStatus(); // immediately update status
+}
+
 void doorChanged() {
   status.isDoorOpen = digitalRead(DOOR_PIN);
   if (status.isDoorOpen) {
@@ -78,15 +86,16 @@ void setup() {
   while (!Serial && !Serial.available()) {
   }
 
-  logger.info("Starting thermal management system...");
+  logger.info(F("Starting thermal management system..."));
   logger.info(BOARD_NAME);
 
   ITimer1.init();
 
   if (ITimer1.attachInterrupt(HW_TIMER_INTERVAL_FREQ, pwmTimerHandler)) {
-    logger.debug("Starting  ITimer1 OK");
+    logger.debug(F("Starting  ITimer1 OK"));
   } else {
-    logger.error("Can't set ITimer1 correctly. Select another freq. or timer");
+    logger.error(
+        F("Can't set ITimer1 correctly. Select another freq. or timer"));
   }
 
   // initialize built-in LED pin as an output (will blink on heartbeat)
@@ -119,23 +128,26 @@ void setup() {
 
   max31865.begin(MAX31865_3WIRE);
 
-  logger.info("Thermal management system started");
-
-  // TODO setup timer for sending status
+  logger.info(F("Thermal management system started"));
 }
 
 /// Reads the temperature sensor, updating the status struct accordingly.
 /// Returns true if the temperature sensor reading was successful, false
 /// otherwise.
 void readTemperature() {
-  max31865.temperature(RNOMINAL, RREF);
+  float temperature = max31865.temperature(RNOMINAL, RREF);
   uint8_t fault = max31865.readFault();
   if (fault) {
     // TODO do more?
-    enterErrorState("Fault when reading temperature sensor");
+    enterErrorState(F("Fault when reading temperature sensor"));
   }
 
-  // TODO check if reading was reasonable
+  status.currentTemperature = static_cast<uint8_t>(temperature);
+
+  if (temperature > MAX_TEMPERATURE) {
+    // if current temperature is over our hardcoded safety limit
+    enterErrorState(F("Current temperature rose over safety limit!"));
+  }
 }
 
 char receivedChars[INPUT_BUFFER_SIZE];
@@ -175,6 +187,7 @@ bool receiveCommand() {
 uint8_t lastTopHeatDutyCycle = 0;
 uint8_t lastBottomHeatDutyCycle = 0;
 uint32_t lastUiHeartbeat = 0;
+uint32_t lastSentStatus = 0;
 
 void loop() {
   static StaticJsonDocument<32> commandJson;
@@ -187,7 +200,7 @@ void loop() {
 
     // Test if parsing succeeds.
     if (error) {
-      logger.warn("Could not parse command");
+      logger.warn(F("Could not parse command"));
       logger.warn(error.c_str());
     } else {
       // check if "action" is present
@@ -195,7 +208,7 @@ void loop() {
         int targetTemperature = commandJson["targetTemperature"];
         if (targetTemperature < 0 ||
             targetTemperature > MAX_TARGET_TEMPERATURE) {
-          logger.warn("Invalid target temperature");
+          logger.warn(F("Invalid target temperature"));
         } else {
           status.targetTemperature = targetTemperature;
         }
@@ -219,7 +232,13 @@ void loop() {
       newData = false;
     }
   } else if (millis() - lastUiHeartbeat > UI_TIMEOUT) {
-    enterErrorState("UI timeout");
+    enterErrorState(F("UI timeout"));
+  }
+
+  // send status
+  if (millis() - lastSentStatus > STATUS_SEND_INTERVAL) {
+    sendStatus();
+    lastSentStatus = millis();
   }
 
   readTemperature();
