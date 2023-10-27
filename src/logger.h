@@ -30,7 +30,7 @@ public:
 
   void error(const __FlashStringHelper *message) const;
 
-  void log(LogLevel severity, const char *message) const;
+  void log(LogLevel severity, const String& message) const;
 
   void log(LogLevel severity, const __FlashStringHelper *message) const;
 

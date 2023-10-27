@@ -21,9 +21,9 @@ void Logger::error(const char *message) const {
 void Logger::error(const __FlashStringHelper *message) const {
   log(LogLevel::CRITICAL, message);
 }
-void Logger::log(LogLevel severity, const char *message) const {
+void Logger::log(LogLevel severity, const String& message) const {
   if (severity >= logLevel) {
-    StaticJsonDocument<256> logJson;
+    DynamicJsonDocument logJson(256);
     logJson["action"] = "log";
     logJson["time"] = millis();
     logJson["severity"] = logLevelToString(severity);
@@ -36,7 +36,7 @@ void Logger::log(LogLevel severity, const char *message) const {
 
 void Logger::log(LogLevel severity, const __FlashStringHelper *message) const {
   if (severity >= logLevel) {
-    StaticJsonDocument<256> logJson;
+    DynamicJsonDocument logJson(256);
     logJson["action"] = "log";
     logJson["time"] = millis();
     logJson["severity"] = logLevelToString(severity);

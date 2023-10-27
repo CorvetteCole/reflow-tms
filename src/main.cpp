@@ -108,8 +108,12 @@ void setup() {
   pinMode(DOOR_PIN, INPUT_PULLUP);
   pinMode(RESET_PIN, INPUT_PULLUP);
 
+  logger.debug(F("Attaching interrupts..."));
+
   attachInterrupt(digitalPinToInterrupt(DOOR_PIN), doorChanged, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(RESET_PIN), resetFunc, RISING);
+  attachInterrupt(digitalPinToInterrupt(RESET_PIN), resetFunc, FALLING);
+
+  logger.debug(F("Initializing PWM..."));
 
   // initialize both HEATING element PWM interfaces, set duty cycle to 0
   heatingElementPwm.setPWM(TOP_HEATING_ELEMENT_PIN,
@@ -120,6 +124,8 @@ void setup() {
 
   heatingElementPwm.disableAll(); // disable timers while we aren't using them
 
+  logger.debug(F("Initializing PID..."));
+
   topHeatingElementPid.SetOutputLimits(0, 100);
   topHeatingElementPid.SetTunings(
       TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI, TOP_HEATING_ELEMENT_KD);
@@ -128,6 +134,8 @@ void setup() {
   bottomHeatingElementPid.SetTunings(BOTTOM_HEATING_ELEMENT_KP,
                                      BOTTOM_HEATING_ELEMENT_KI,
                                      BOTTOM_HEATING_ELEMENT_KD);
+
+  logger.debug(F("Initializing MAX31865_3WIRE..."));
 
   max31865.begin(MAX31865_3WIRE);
 
