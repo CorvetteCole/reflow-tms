@@ -6,9 +6,10 @@
 #define USING_MICROS_RESOLUTION true
 
 #define _PWM_LOGLEVEL_ 3
-#include "Status.h"
 #include "constants.h"
+#include "status.h"
 #include <AVR_Slow_PWM.h>
+#include <Adafruit_MAX31865.h>
 
 // Don't change these numbers to make higher Timer freq. System can hang
 #define HW_TIMER_INTERVAL_FREQ 10000L
@@ -27,12 +28,14 @@ QuickPID bottomHeatingElementPid(&pidCurrentTemperature,
                                  &pidBottomHeatDutyCycle,
                                  &pidTargetTemperature);
 
+Adafruit_MAX31865 rtd = Adafruit_MAX31865(csPin, diPin, doPin, clkPin);
+
 void timerHandler() { heatingElementPwm.run(); }
 
 void immediateStop() {
-  heatingElementPwm.modifyPWMChannel(0, heatingElementPwmPins[0],
+  heatingElementPwm.modifyPWMChannel(0, topHeatingElementPin,
                                      heatingElementPwmFrequency, 0);
-  heatingElementPwm.modifyPWMChannel(1, heatingElementPwmPins[1],
+  heatingElementPwm.modifyPWMChannel(1, bottomHeatingElementPin,
                                      heatingElementPwmFrequency, 0);
   heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN, heatingElementPwmFrequency,
                                      0);
@@ -88,13 +91,10 @@ void setup() {
   pinMode(doorPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(doorPin), doorChanged, CHANGE);
 
-  // initialize temperature sensor pin as an input
-  pinMode(temperatureSensorPin, INPUT);
-
   // initialize both heating element PWM interfaces, set duty cycle to 0
-  heatingElementPwm.setPWM(heatingElementPwmPins[0], heatingElementPwmFrequency,
+  heatingElementPwm.setPWM(topHeatingElementPin, heatingElementPwmFrequency,
                            0);
-  heatingElementPwm.setPWM(heatingElementPwmPins[1], heatingElementPwmFrequency,
+  heatingElementPwm.setPWM(bottomHeatingElementPin, heatingElementPwmFrequency,
                            0);
   heatingElementPwm.setPWM(LED_BUILTIN, heatingElementPwmFrequency, 0);
 
@@ -118,7 +118,7 @@ bool readTemperature() {
   bool success = true;
 
   // read temperature sensor
-  auto temperatureSensorReading = analogRead(temperatureSensorPin);
+//  auto temperatureSensorReading = analogRead(temperatureSensorPin);
   // TODO do math to convert reading to degrees Celsius
 
   // TODO check if reading was reasonable
@@ -179,10 +179,10 @@ void loop() {
   if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
       status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {
     // set PWM
-    heatingElementPwm.modifyPWMChannel(0, heatingElementPwmPins[0],
+    heatingElementPwm.modifyPWMChannel(0, topHeatingElementPin,
                                        heatingElementPwmFrequency,
                                        status.topHeatDutyCycle);
-    heatingElementPwm.modifyPWMChannel(1, heatingElementPwmPins[1],
+    heatingElementPwm.modifyPWMChannel(1, bottomHeatingElementPin,
                                        heatingElementPwmFrequency,
                                        status.bottomHeatDutyCycle);
     heatingElementPwm.modifyPWMChannel(
