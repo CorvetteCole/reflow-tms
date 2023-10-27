@@ -48,7 +48,10 @@ void immediateStop() {
   status.bottomHeatDutyCycle = 0;
 }
 
-void sendStatus() { serializeJson(status.toJson(), Serial); }
+void sendStatus() {
+  serializeJson(status.toJson(), Serial);
+  Serial.println();
+}
 
 void enterErrorState(const char *error) {
   strcpy(status.error, error);
@@ -203,8 +206,10 @@ void loop() {
       logger.warn(F("Could not parse command"));
       logger.warn(error.c_str());
     } else {
-      // check if "action" is present
+      bool commandPresent = false;
+
       if (commandJson.containsKey("targetTemperature")) {
+        commandPresent = true;
         int targetTemperature = commandJson["targetTemperature"];
         if (targetTemperature < 0 ||
             targetTemperature > MAX_TARGET_TEMPERATURE) {
@@ -215,6 +220,7 @@ void loop() {
       }
 
       if (commandJson.containsKey("logLevel")) {
+        commandPresent = true;
         const char *logLevel = commandJson["logLevel"];
         if (strcasecmp(logLevel, "DEBUG") == 0) {
           logger.logLevel = LogLevel::DEBUG;
