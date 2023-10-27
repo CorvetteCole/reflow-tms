@@ -7,6 +7,7 @@
 
 #define _PWM_LOGLEVEL_ 3
 #include "constants.h"
+#include "logger.h"
 #include "status.h"
 #include <AVR_Slow_PWM.h>
 #include <Adafruit_MAX31865.h>
@@ -28,7 +29,9 @@ QuickPID bottomHeatingElementPid(&pidCurrentTemperature,
                                  &pidBottomHeatDutyCycle,
                                  &pidTargetTemperature);
 
-Adafruit_MAX31865 rtd = Adafruit_MAX31865(CS_PIN, DI_PIN, DO_PIN, CLK_PIN);
+Adafruit_MAX31865 max31865 = Adafruit_MAX31865(CS_PIN, DI_PIN, DO_PIN, CLK_PIN);
+
+Logger logger = Logger(LogLevel::DEBUG);
 
 void timerHandler() { heatingElementPwm.run(); }
 
@@ -38,12 +41,17 @@ void immediateStop() {
   heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
-                                     HEATING_ELEMENT_PWM_FREQUENCY,
-                                     0);
+                                     HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.disableAll();
 
   status.topHeatDutyCycle = 0;
   status.bottomHeatDutyCycle = 0;
+}
+
+void enterErrorState(const char *error) {
+  strcpy(status.error, error);
+  status.state = State::error;
+  immediateStop();
 }
 
 void doorChanged() {
@@ -52,9 +60,7 @@ void doorChanged() {
   Serial.println(status.isDoorOpen);
 
   if (status.state == heating && status.isDoorOpen) {
-    strcpy(status.error, "doorOpenedDuringHeating");
-    status.state = error;
-    immediateStop();
+    enterErrorState("Door opened during heating");
   }
 }
 
@@ -63,26 +69,24 @@ void sendStatus() {
   serializeJson(status.toJson(), Serial);
 }
 
+void sendLogMessage(const char *message, ) {
+  // TODO
+}
+
 void setup() {
   Serial.begin(115200);
-  while (!Serial)
-    ; // wait for serial to connect
+  while (!Serial && !Serial.available()) {
+  }
 
-  Serial.println("\nStarting thermal management system...");
-  Serial.println(BOARD_NAME);
-  Serial.println(AVR_SLOW_PWM_VERSION);
-  Serial.print(F("CPU Frequency = "));
-  Serial.print(F_CPU / 1000000);
-  Serial.println(F(" MHz"));
+  logger.info("Starting thermal management system...");
+  logger.info(BOARD_NAME);
 
   ITimer1.init();
 
   if (ITimer1.attachInterrupt(HW_TIMER_INTERVAL_FREQ, timerHandler)) {
-    Serial.println(F("Starting  ITimer1 OK"));
-    Serial.println(micros());
+    logger.debug("Starting  ITimer1 OK");
   } else {
-    Serial.println(
-        F("Can't set ITimer1 correctly. Select another freq. or timer"));
+    logger.error("Can't set ITimer1 correctly. Select another freq. or timer");
   }
 
   // initialize built-in LED pin as an output (will blink on heartbeat)
@@ -94,23 +98,25 @@ void setup() {
 
   // initialize both heating element PWM interfaces, set duty cycle to 0
   heatingElementPwm.setPWM(TOP_HEATING_ELEMENT_PIN,
-                           HEATING_ELEMENT_PWM_FREQUENCY,
-                           0);
+                           HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.setPWM(BOTTOM_HEATING_ELEMENT_PIN,
-                           HEATING_ELEMENT_PWM_FREQUENCY,
-                           0);
+                           HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.setPWM(LED_BUILTIN, HEATING_ELEMENT_PWM_FREQUENCY, 0);
 
   heatingElementPwm.disableAll(); // disable timers while we aren't using them
 
   topHeatingElementPid.SetOutputLimits(0, 100);
-  topHeatingElementPid.SetTunings(TOP_HEATING_ELEMENT_KP,
-                                  TOP_HEATING_ELEMENT_KI, TOP_HEATING_ELEMENT_KD);
+  topHeatingElementPid.SetTunings(
+      TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI, TOP_HEATING_ELEMENT_KD);
 
   bottomHeatingElementPid.SetOutputLimits(0, 100);
   bottomHeatingElementPid.SetTunings(BOTTOM_HEATING_ELEMENT_KP,
                                      BOTTOM_HEATING_ELEMENT_KI,
                                      BOTTOM_HEATING_ELEMENT_KD);
+
+  max31865.begin(MAX31865_3WIRE);
+
+  logger.info("Thermal management system started");
 
   // TODO setup timer for sending status
 }
@@ -118,18 +124,15 @@ void setup() {
 /// Reads the temperature sensor, updating the status struct accordingly.
 /// Returns true if the temperature sensor reading was successful, false
 /// otherwise.
-bool readTemperature() {
-  bool success = true;
-
-  // read temperature sensor
-//  auto temperatureSensorReading = analogRead(temperatureSensorPin);
-  // TODO do math to convert reading to degrees Celsius
+void readTemperature() {
+  max31865.temperature(RNOMINAL, RREF);
+  uint8_t fault = max31865.readFault();
+  if (fault) {
+    // TODO do more?
+    enterErrorState("Fault when reading temperature sensor");
+  }
 
   // TODO check if reading was reasonable
-
-  //  status.currentTemperature = temperatureSensorReading;
-
-  return true;
 }
 
 uint8_t lastTopHeatDutyCycle = 0;
@@ -140,12 +143,12 @@ void loop() {
   if (status.state == State::error) {
     // make sure heating elements are off
     if (status.topHeatDutyCycle != 0 || status.bottomHeatDutyCycle != 0) {
-      Serial.println(
+      sendLogMessage(
           "Heating elements should be off already! Turning off now...");
       immediateStop();
     }
 
-    // TODO need to wait for reset command
+    // TODO need to wait for reset command, clear fault on MAX31865 if present
     return;
   }
 
@@ -189,9 +192,9 @@ void loop() {
     heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
                                        HEATING_ELEMENT_PWM_FREQUENCY,
                                        status.bottomHeatDutyCycle);
-    heatingElementPwm.modifyPWMChannel(
-        2, LED_BUILTIN,
-                                       HEATING_ELEMENT_PWM_FREQUENCY, status.bottomHeatDutyCycle);
+    heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
+                                       HEATING_ELEMENT_PWM_FREQUENCY,
+                                       status.bottomHeatDutyCycle);
     lastTopHeatDutyCycle = status.topHeatDutyCycle;
     lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
   }
