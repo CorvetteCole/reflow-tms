@@ -248,8 +248,6 @@ void loop() {
       logger.warn("Heating elements should be off already! Turning off now...");
       immediateStop();
     }
-
-    // TODO need to wait for reset command, clear fault on MAX31865 if present
     return;
   }
 
@@ -300,31 +298,3 @@ void loop() {
     lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
   }
 }
-
-// void loop() {
-//   heatingElementPwm.enableAll();
-//
-//   for (int i = 0; i <= 100; i++) {
-//     Serial.print("Setting HEATING elements PWM duty cycle to ");
-//     Serial.print(i);
-//     Serial.println("%");
-//     heatingElementPwm.modifyPWMChannel(0, heatingElementPwmPins[0],
-//                                        HEATING_ELEMENT_PWM_FREQUENCY, i);
-//     heatingElementPwm.modifyPWMChannel(1, heatingElementPwmPins[1],
-//                                        HEATING_ELEMENT_PWM_FREQUENCY, i);
-//     heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
-//                                        HEATING_ELEMENT_PWM_FREQUENCY, i);
-//     delay(100);
-//   }
-//   delay(5000);
-//   Serial.println("Disabling all HEATING elements");
-//   heatingElementPwm.modifyPWMChannel(0, heatingElementPwmPins[0],
-//                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
-//   heatingElementPwm.modifyPWMChannel(1, heatingElementPwmPins[1],
-//                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
-//   heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
-//   HEATING_ELEMENT_PWM_FREQUENCY,
-//                                      0);
-//   heatingElementPwm.disableAll();
-//   delay(5000);
-// }
