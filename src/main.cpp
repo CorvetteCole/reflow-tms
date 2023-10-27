@@ -5,7 +5,7 @@
 #define USE_TIMER_1 true
 #define USING_MICROS_RESOLUTION true
 
-#define _PWM_LOGLEVEL_ 3
+#define _PWM_LOGLEVEL_ 0
 #include "constants.h"
 #include "logger.h"
 #include "status.h"
