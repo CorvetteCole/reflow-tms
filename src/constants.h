@@ -1,24 +1,24 @@
 #ifndef REFLOW_TMS_CONSTANTS_H
 #define REFLOW_TMS_CONSTANTS_H
 
-#define heatingElementPwmFrequency 30.0f
-#define maxTemperature 400
+#define HEATING_ELEMENT_PWM_FREQUENCY 30.0f
+#define MAX_TEMPERATURE 400
 
-#define topHeatingElementPin 9
-#define bottomHeatingElementPin 10
-#define doorPin 2
-#define resetPin 3
-#define csPin 14
-#define diPin 15
-#define doPin 16
-#define clkPin 17
+#define TOP_HEATING_ELEMENT_PIN 9
+#define BOTTOM_HEATING_ELEMENT_PIN 10
+#define DOOR_PIN 2
+#define RESET_PIN 3
+#define CS_PIN 14
+#define DI_PIN 15
+#define DO_PIN 16
+#define CLK_PIN 17
 
-#define topHeatingElementKp 1.0f
-#define topHeatingElementKi 0.0f
-#define topHeatingElementKd 0.0f
-#define bottomHeatingElementKp 1.0f
-#define bottomHeatingElementKi 0.0f
-#define bottomHeatingElementKd 0.0f
+#define TOP_HEATING_ELEMENT_KP 1.0f
+#define TOP_HEATING_ELEMENT_KI 0.0f
+#define TOP_HEATING_ELEMENT_KD 0.0f
+#define BOTTOM_HEATING_ELEMENT_KP 1.0f
+#define BOTTOM_HEATING_ELEMENT_KI 0.0f
+#define BOTTOM_HEATING_ELEMENT_KD 0.0f
 
 // The value of the Rref resistor. Use 430.0 for PT100 and 4300.0 for PT1000
 #define RREF 430.0
@@ -26,7 +26,7 @@
 // 100.0 for PT100, 1000.0 for PT1000
 #define RNOMINAL 100.0
 
-#define uiTimeout 250 // in milliseconds
+#define UI_TIMEOUT 250 // in milliseconds
 
 // enum Error {
 //   doorOpenedDuringHeating,

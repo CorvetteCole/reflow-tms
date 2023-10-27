@@ -28,16 +28,17 @@ QuickPID bottomHeatingElementPid(&pidCurrentTemperature,
                                  &pidBottomHeatDutyCycle,
                                  &pidTargetTemperature);
 
-Adafruit_MAX31865 rtd = Adafruit_MAX31865(csPin, diPin, doPin, clkPin);
+Adafruit_MAX31865 rtd = Adafruit_MAX31865(CS_PIN, DI_PIN, DO_PIN, CLK_PIN);
 
 void timerHandler() { heatingElementPwm.run(); }
 
 void immediateStop() {
-  heatingElementPwm.modifyPWMChannel(0, topHeatingElementPin,
-                                     heatingElementPwmFrequency, 0);
-  heatingElementPwm.modifyPWMChannel(1, bottomHeatingElementPin,
-                                     heatingElementPwmFrequency, 0);
-  heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN, heatingElementPwmFrequency,
+  heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
+                                     HEATING_ELEMENT_PWM_FREQUENCY, 0);
+  heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
+                                     HEATING_ELEMENT_PWM_FREQUENCY, 0);
+  heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
+                                     HEATING_ELEMENT_PWM_FREQUENCY,
                                      0);
   heatingElementPwm.disableAll();
 
@@ -46,7 +47,7 @@ void immediateStop() {
 }
 
 void doorChanged() {
-  status.isDoorOpen = digitalRead(doorPin);
+  status.isDoorOpen = digitalRead(DOOR_PIN);
   Serial.print("Door open: ");
   Serial.println(status.isDoorOpen);
 
@@ -88,25 +89,28 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
 
   // initialize door sensor pin as an input
-  pinMode(doorPin, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(doorPin), doorChanged, CHANGE);
+  pinMode(DOOR_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(DOOR_PIN), doorChanged, CHANGE);
 
   // initialize both heating element PWM interfaces, set duty cycle to 0
-  heatingElementPwm.setPWM(topHeatingElementPin, heatingElementPwmFrequency,
+  heatingElementPwm.setPWM(TOP_HEATING_ELEMENT_PIN,
+                           HEATING_ELEMENT_PWM_FREQUENCY,
                            0);
-  heatingElementPwm.setPWM(bottomHeatingElementPin, heatingElementPwmFrequency,
+  heatingElementPwm.setPWM(BOTTOM_HEATING_ELEMENT_PIN,
+                           HEATING_ELEMENT_PWM_FREQUENCY,
                            0);
-  heatingElementPwm.setPWM(LED_BUILTIN, heatingElementPwmFrequency, 0);
+  heatingElementPwm.setPWM(LED_BUILTIN, HEATING_ELEMENT_PWM_FREQUENCY, 0);
 
   heatingElementPwm.disableAll(); // disable timers while we aren't using them
 
   topHeatingElementPid.SetOutputLimits(0, 100);
-  topHeatingElementPid.SetTunings(topHeatingElementKp, topHeatingElementKi,
-                                  topHeatingElementKd);
+  topHeatingElementPid.SetTunings(TOP_HEATING_ELEMENT_KP,
+                                  TOP_HEATING_ELEMENT_KI, TOP_HEATING_ELEMENT_KD);
 
   bottomHeatingElementPid.SetOutputLimits(0, 100);
-  bottomHeatingElementPid.SetTunings(
-      bottomHeatingElementKp, bottomHeatingElementKi, bottomHeatingElementKd);
+  bottomHeatingElementPid.SetTunings(BOTTOM_HEATING_ELEMENT_KP,
+                                     BOTTOM_HEATING_ELEMENT_KI,
+                                     BOTTOM_HEATING_ELEMENT_KD);
 
   // TODO setup timer for sending status
 }
@@ -179,14 +183,15 @@ void loop() {
   if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
       status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {
     // set PWM
-    heatingElementPwm.modifyPWMChannel(0, topHeatingElementPin,
-                                       heatingElementPwmFrequency,
+    heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
+                                       HEATING_ELEMENT_PWM_FREQUENCY,
                                        status.topHeatDutyCycle);
-    heatingElementPwm.modifyPWMChannel(1, bottomHeatingElementPin,
-                                       heatingElementPwmFrequency,
+    heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
+                                       HEATING_ELEMENT_PWM_FREQUENCY,
                                        status.bottomHeatDutyCycle);
     heatingElementPwm.modifyPWMChannel(
-        2, LED_BUILTIN, heatingElementPwmFrequency, status.bottomHeatDutyCycle);
+        2, LED_BUILTIN,
+                                       HEATING_ELEMENT_PWM_FREQUENCY, status.bottomHeatDutyCycle);
     lastTopHeatDutyCycle = status.topHeatDutyCycle;
     lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
   }
@@ -200,21 +205,21 @@ void loop() {
 //     Serial.print(i);
 //     Serial.println("%");
 //     heatingElementPwm.modifyPWMChannel(0, heatingElementPwmPins[0],
-//                                        heatingElementPwmFrequency, i);
+//                                        HEATING_ELEMENT_PWM_FREQUENCY, i);
 //     heatingElementPwm.modifyPWMChannel(1, heatingElementPwmPins[1],
-//                                        heatingElementPwmFrequency, i);
+//                                        HEATING_ELEMENT_PWM_FREQUENCY, i);
 //     heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
-//                                        heatingElementPwmFrequency, i);
+//                                        HEATING_ELEMENT_PWM_FREQUENCY, i);
 //     delay(100);
 //   }
 //   delay(5000);
 //   Serial.println("Disabling all heating elements");
 //   heatingElementPwm.modifyPWMChannel(0, heatingElementPwmPins[0],
-//                                      heatingElementPwmFrequency, 0);
+//                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
 //   heatingElementPwm.modifyPWMChannel(1, heatingElementPwmPins[1],
-//                                      heatingElementPwmFrequency, 0);
+//                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
 //   heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
-//   heatingElementPwmFrequency,
+//   HEATING_ELEMENT_PWM_FREQUENCY,
 //                                      0);
 //   heatingElementPwm.disableAll();
 //   delay(5000);
