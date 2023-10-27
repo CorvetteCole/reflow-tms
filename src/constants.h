@@ -1,5 +1,3 @@
-#include <Arduino.h>
-
 #ifndef REFLOW_TMS_CONSTANTS_H
 #define REFLOW_TMS_CONSTANTS_H
 
