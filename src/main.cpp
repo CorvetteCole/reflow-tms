@@ -143,14 +143,14 @@ void readTemperature() {
   float ratio = rtd;
   ratio /= 32768;
 
-  //  logger.debug(String("RTD value: ") + String(rtd, 8));
-  //  logger.debug(String("Ratio: ") + String(ratio, 8));
-  //  logger.debug(String("Resistance: ") + String(RREF * ratio, 8));
-  //  logger.debug(String("Temperature: ") + String(temperature, 8));
+//  logger.debug(String("RTD value: ") + String(rtd, 8));
+//  logger.debug(String("Ratio: ") + String(ratio, 8));
+//  logger.debug(String("Resistance: ") + String(RREF * ratio, 8));
+//  delay(100);
+//  logger.debug(String("Temperature: ") + String(temperature, 8));
 
   uint8_t fault = max31865.readFault();
   if (fault) {
-    // TODO do more?
     enterErrorState(ERROR_CURRENT_TEMPERATURE_FAULT);
 
     if (fault & MAX31865_FAULT_HIGHTHRESH) {
@@ -171,7 +171,7 @@ void readTemperature() {
     if (fault & MAX31865_FAULT_OVUV) {
       logger.error(F("Under/Over voltage"));
     }
-    max31865.clearFault();
+    delay(100);
   }
 
   status.currentTemperature = static_cast<uint16_t>(temperature);
@@ -180,8 +180,6 @@ void readTemperature() {
     // if current temperature is over our hardcoded safety limit
     enterErrorState(ERROR_CURRENT_TEMPERATURE_TOO_HIGH);
   }
-
-  //  Serial.println(status.currentTemperature);
 }
 
 char receivedChars[INPUT_BUFFER_SIZE];
@@ -303,7 +301,6 @@ void loop() {
     sendStatus();
     lastSentStatus = millis();
   }
-
 
   if (status.state == State::ERROR) {
     //    logger.debug(F("In error state, not controlling heating elements"));

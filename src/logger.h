@@ -1,7 +1,3 @@
-//
-// Created by coleg on 10/27/23.
-//
-
 #ifndef REFLOW_TMS_LOGGER_H
 #define REFLOW_TMS_LOGGER_H
 
@@ -13,7 +9,8 @@ enum LogLevel { DEBUG = 0, INFO = 1, WARN = 2, CRITICAL = 3 };
 class Logger {
 
 public:
-  LogLevel logLevel = INFO;
+  LogLevel logLevel = LogLevel::INFO;
+
   void debug(const String &message) const;
 
   void debug(const __FlashStringHelper *message) const;
@@ -30,7 +27,7 @@ public:
 
   void error(const __FlashStringHelper *message) const;
 
-  void log(LogLevel severity, const String& message) const;
+  void log(LogLevel severity, const String &message) const;
 
   void log(LogLevel severity, const __FlashStringHelper *message) const;
 
@@ -39,7 +36,7 @@ public:
   Logger() = default;
 
 private:
-  static char const *logLevelToString(LogLevel severity);
+  const char *const LogLevelStrings[4] = {"DEBUG", "INFO", "WARN", "CRITICAL"};
 };
 
 #endif // REFLOW_TMS_LOGGER_H
