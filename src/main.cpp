@@ -255,6 +255,12 @@ uint8_t lastBottomHeatDutyCycle = 0;
 uint32_t lastUiHeartbeat = 0;
 uint32_t lastSentStatus = 0;
 
+// TODO:
+// - figure out why erroring doesn't actually set the output to off every time (!!)
+// - figure out the funkiness with the pid loop integral which seems to get weird if you go between idle and heating states many times
+// - figure out possible memory issues which cause a crash on error after awhile (I'm leaking memory somewhere....)
+
+
 void loop() {
   static StaticJsonDocument<32> commandJson;
 
