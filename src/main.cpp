@@ -328,14 +328,12 @@ void loop() {
     //    heatingElementPwm.disableAll(); // disable timers while we aren't
     //    using them
   } else if (status.state != State::COOLING && status.targetTemperature != 0 &&
-             status.currentTemperature > status.targetTemperature &&
-             status.currentTemperature - status.targetTemperature > 5) {
+             status.currentTemperature > status.targetTemperature) {
     logger.info(F("Started cooling"));
     status.state = State::COOLING;
     bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);
   } else if (status.state != State::HEATING && status.targetTemperature != 0 &&
-             status.targetTemperature > status.currentTemperature &&
-             status.targetTemperature - status.currentTemperature > 5) {
+             status.targetTemperature > status.currentTemperature) {
     logger.info(F("Started heating"));
     status.state = State::HEATING;
     bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);

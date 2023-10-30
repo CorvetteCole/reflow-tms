@@ -15,11 +15,11 @@
 #define CLK_PIN 17
 
 #define TOP_HEATING_ELEMENT_KP 1.0f
-#define TOP_HEATING_ELEMENT_KI 0.0f
-#define TOP_HEATING_ELEMENT_KD 0.0f
+#define TOP_HEATING_ELEMENT_KI 3.0f
+#define TOP_HEATING_ELEMENT_KD 0.2f
 #define BOTTOM_HEATING_ELEMENT_KP 1.0f
-#define BOTTOM_HEATING_ELEMENT_KI 0.0f
-#define BOTTOM_HEATING_ELEMENT_KD 0.0f
+#define BOTTOM_HEATING_ELEMENT_KI 3.0f
+#define BOTTOM_HEATING_ELEMENT_KD 0.2f
 
 #define INPUT_BUFFER_SIZE 32
 
@@ -29,7 +29,7 @@
 // 100.0 for PT100, 1000.0 for PT1000
 #define RNOMINAL 100.0
 
-#define UI_TIMEOUT 200 // in milliseconds
+#define UI_TIMEOUT 1000 // in milliseconds
 #define STATUS_SEND_INTERVAL 100 // ms
 
 // binary error codes (can be combined)
