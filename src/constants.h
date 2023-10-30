@@ -29,7 +29,7 @@
 // 100.0 for PT100, 1000.0 for PT1000
 #define RNOMINAL 100.0
 
-#define UI_TIMEOUT 250 // in milliseconds
+#define UI_TIMEOUT 25000 // in milliseconds
 #define STATUS_SEND_INTERVAL 1000 // ms
 
 // enum Error {

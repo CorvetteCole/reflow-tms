@@ -31,7 +31,7 @@ QuickPID bottomHeatingElementPid(&pidCurrentTemperature,
 
 Adafruit_MAX31865 max31865 = Adafruit_MAX31865(CS_PIN, DI_PIN, DO_PIN, CLK_PIN);
 
-Logger logger = Logger(LogLevel::DEBUG);
+Logger logger = Logger(LogLevel::WARN);
 
 void pwmTimerHandler() { heatingElementPwm.run(); }
 
@@ -42,7 +42,7 @@ void immediateStop() {
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
-  heatingElementPwm.disableAll();
+//  heatingElementPwm.disableAll();
 
   status.topHeatDutyCycle = 0;
   status.bottomHeatDutyCycle = 0;
@@ -105,6 +105,7 @@ void setup() {
   logger.debug(F("Initializing ITimer1..."));
 
   ITimer1.init();
+  delay(100);
 
   logger.debug(F("Attaching ITimer1 interrupt..."));
 
@@ -136,7 +137,8 @@ void setup() {
                            HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.setPWM(LED_BUILTIN, HEATING_ELEMENT_PWM_FREQUENCY, 0);
 
-  heatingElementPwm.disableAll(); // disable timers while we aren't using them
+  //  heatingElementPwm.disableAll(); // disable timers while we aren't using
+  //  them
 
   logger.debug(F("Initializing PID..."));
 
@@ -256,6 +258,23 @@ uint32_t lastSentStatus = 0;
 void loop() {
   static StaticJsonDocument<32> commandJson;
 
+  if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
+      status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {
+    //    logger.debug(F("Updating PWM"));
+    // set PWM
+    heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
+                                       HEATING_ELEMENT_PWM_FREQUENCY,
+                                       status.topHeatDutyCycle);
+    heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
+                                       HEATING_ELEMENT_PWM_FREQUENCY,
+                                       status.bottomHeatDutyCycle);
+    heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
+                                       HEATING_ELEMENT_PWM_FREQUENCY,
+                                       status.bottomHeatDutyCycle);
+    lastTopHeatDutyCycle = status.topHeatDutyCycle;
+    lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
+  }
+
   //  logger.debug(F("Reading command"));
   if (receiveCommand()) {
     lastUiHeartbeat = millis();
@@ -305,8 +324,9 @@ void loop() {
 
       newData = false;
     }
-  } else if (lastUiHeartbeat != 0 && millis() - lastUiHeartbeat > UI_TIMEOUT) {
+  } else if (lastUiHeartbeat != 0 && millis() - lastUiHeartbeat > UI_TIMEOUT && status.state != State::ERROR) {
     enterErrorState(F("UI timeout"));
+//    delay(500);
   }
 
   // send status
@@ -324,7 +344,8 @@ void loop() {
     // make sure HEATING elements are off
     if (status.topHeatDutyCycle != 0 || status.bottomHeatDutyCycle != 0) {
       logger.warn("Heating elements should be off already! Turning off now...");
-      //      immediateStop();
+      immediateStop();
+      delay(500);
     }
 
     delay(1);
@@ -342,13 +363,13 @@ void loop() {
     status.topHeatDutyCycle = 0;
     status.bottomHeatDutyCycle = 0;
     heatingElementPwm.disableAll(); // disable timers while we aren't using them
-  } else if (status.targetTemperature != 0 &&
+  } else if (status.state != State::COOLING && status.targetTemperature != 0 &&
              status.currentTemperature > status.targetTemperature &&
              status.currentTemperature - status.targetTemperature > 5) {
     logger.info(F("Started cooling"));
     status.state = COOLING;
     bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);
-  } else if (status.targetTemperature != 0 &&
+  } else if (status.state != State::HEATING && status.targetTemperature != 0 &&
              status.targetTemperature > status.currentTemperature &&
              status.targetTemperature - status.currentTemperature > 5) {
     logger.info(F("Started heating"));
@@ -357,33 +378,17 @@ void loop() {
   }
 
   if (status.state != IDLE) {
-    logger.debug(F("Calculating duty cycles"));
-    heatingElementPwm.enableAll();
+    //    logger.debug(F("Calculating duty cycles"));
+    //    heatingElementPwm.enableAll();
     pidTargetTemperature = status.targetTemperature;
     pidCurrentTemperature = status.currentTemperature;
-    topHeatingElementPid.Compute();
+//    topHeatingElementPid.Compute();
     bottomHeatingElementPid.Compute();
     // we can statically cast to uint8_t because the output limits are set to
     // 0-100
-    status.topHeatDutyCycle = static_cast<uint8_t>(pidTopHeatDutyCycle);
+//    status.topHeatDutyCycle = static_cast<uint8_t>(pidTopHeatDutyCycle);
+    status.topHeatDutyCycle = static_cast<uint8_t>(pidBottomHeatDutyCycle);
     status.bottomHeatDutyCycle = static_cast<uint8_t>(pidBottomHeatDutyCycle);
-  }
-
-  if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
-      status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {
-    logger.debug(F("Updating PWM"));
-    // set PWM
-    heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
-                                       HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.topHeatDutyCycle);
-    heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
-                                       HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.bottomHeatDutyCycle);
-    heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
-                                       HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.bottomHeatDutyCycle);
-    lastTopHeatDutyCycle = status.topHeatDutyCycle;
-    lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
   }
 
   delay(1);
