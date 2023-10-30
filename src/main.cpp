@@ -232,12 +232,16 @@ bool receiveCommand() {
           ndx = INPUT_BUFFER_SIZE - 1;
         }
       } else {
+        receivedChars[ndx] = endMarker;
+        ndx++;
         receivedChars[ndx] = '\0'; // terminate the string
         receiveInProgress = false;
         ndx = 0;
         return true;
       }
     } else if (rc == startMarker) {
+      receivedChars[ndx] = startMarker;
+      ndx++;
       receiveInProgress = true;
     }
   }
@@ -294,7 +298,9 @@ void loop() {
       }
 
       if (!commandPresent) {
-        logger.warn(F("No command present"));
+        logger.warn(F("No command present, received: "));
+        serializeJson(commandJson, Serial);
+        Serial.println();
       }
 
       newData = false;
