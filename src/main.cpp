@@ -13,7 +13,7 @@
 #include <Adafruit_MAX31865.h>
 
 // Don't change these numbers to make higher Timer freq. System can hang
-#define HW_TIMER_INTERVAL_FREQ 10000L
+#define HW_TIMER_INTERVAL_FREQ 8000L
 
 AVR_Slow_PWM heatingElementPwm;
 
@@ -53,32 +53,42 @@ void sendStatus() {
   Serial.println();
 }
 
-void enterErrorState(const char *error) {
-  strcpy(status.error, error);
-  status.state = State::ERROR;
-  logger.error(error);
-  immediateStop();
-  sendStatus(); // immediately update status
+void enterErrorState(const String &error) {
+  if (status.state != State::ERROR) {
+    status.state = State::ERROR;
+    logger.error(error);
+    immediateStop();
+    sendStatus(); // immediately update status
+  } else {
+    logger.warn("An additional error occurred!");
+    logger.warn(error);
+  }
 }
 
 void enterErrorState(const __FlashStringHelper *error) {
-  strcpy_P(status.error, (const char *)error);
-  status.state = State::ERROR;
-  logger.error((const char *)error);
-  immediateStop();
-  sendStatus(); // immediately update status
+  if (status.state != State::ERROR) {
+    status.state = State::ERROR;
+    logger.error(error);
+    immediateStop();
+    sendStatus(); // immediately update status
+  } else {
+    logger.warn("An additional error occurred!");
+    logger.warn(error);
+  }
 }
 
 void doorChanged() {
+  // TODO this method breaks things
   status.isDoorOpen = digitalRead(DOOR_PIN);
   if (status.isDoorOpen) {
-    logger.info("Door opened");
+    //    logger.info(F("Door opened"));
   } else {
-    logger.info("Door closed");
+    //    logger.info(F("Door closed"));
   }
 
   if (status.state == HEATING && status.isDoorOpen) {
-    enterErrorState("Door opened during HEATING");
+    // TODO: FIXME
+    //    enterErrorState("Door opened during HEATING");
   }
 }
 
@@ -90,9 +100,13 @@ void setup() {
   }
 
   logger.info(F("Starting thermal management system..."));
-  logger.info(BOARD_NAME);
+  //  logger.info(BOARD_NAME);
+
+  logger.debug(F("Initializing ITimer1..."));
 
   ITimer1.init();
+
+  logger.debug(F("Attaching ITimer1 interrupt..."));
 
   if (ITimer1.attachInterrupt(HW_TIMER_INTERVAL_FREQ, pwmTimerHandler)) {
     logger.debug(F("Starting  ITimer1 OK"));
@@ -110,8 +124,8 @@ void setup() {
 
   logger.debug(F("Attaching interrupts..."));
 
-  attachInterrupt(digitalPinToInterrupt(DOOR_PIN), doorChanged, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(RESET_PIN), resetFunc, FALLING);
+  //  attachInterrupt(digitalPinToInterrupt(DOOR_PIN), doorChanged, CHANGE);
+  //  attachInterrupt(digitalPinToInterrupt(RESET_PIN), resetFunc, FALLING);
 
   logger.debug(F("Initializing PWM..."));
 
@@ -139,6 +153,8 @@ void setup() {
 
   max31865.begin(MAX31865_3WIRE);
 
+  delay(1000);
+
   logger.info(F("Thermal management system started"));
 }
 
@@ -146,19 +162,52 @@ void setup() {
 /// Returns true if the temperature sensor reading was successful, false
 /// otherwise.
 void readTemperature() {
+  uint16_t rtd = max31865.readRTD();
   float temperature = max31865.temperature(RNOMINAL, RREF);
+  // format strings and print debug
+  float ratio = rtd;
+  ratio /= 32768;
+
+  //  logger.debug(String("RTD value: ") + String(rtd, 8));
+  //  logger.debug(String("Ratio: ") + String(ratio, 8));
+  //  logger.debug(String("Resistance: ") + String(RREF * ratio, 8));
+  //  logger.debug(String("Temperature: ") + String(temperature, 8));
+
   uint8_t fault = max31865.readFault();
   if (fault) {
     // TODO do more?
     enterErrorState(F("Fault when reading temperature sensor"));
+
+    if (fault & MAX31865_FAULT_HIGHTHRESH) {
+      logger.error(F("RTD High Threshold"));
+    }
+    if (fault & MAX31865_FAULT_LOWTHRESH) {
+      logger.error(F("RTD Low Threshold"));
+    }
+    if (fault & MAX31865_FAULT_REFINLOW) {
+      logger.error(F("REFIN- > 0.85 x Bias"));
+    }
+    if (fault & MAX31865_FAULT_REFINHIGH) {
+      logger.error(F("REFIN- < 0.85 x Bias - FORCE- open"));
+    }
+    if (fault & MAX31865_FAULT_RTDINLOW) {
+      logger.error(F("RTDIN- < 0.85 x Bias - FORCE- open"));
+    }
+    if (fault & MAX31865_FAULT_OVUV) {
+      logger.error(F("Under/Over voltage"));
+    }
+    max31865.clearFault();
   }
 
-  status.currentTemperature = static_cast<uint8_t>(temperature);
+  status.currentTemperature = static_cast<uint16_t>(temperature);
 
-  if (temperature > MAX_TEMPERATURE) {
+  if (status.currentTemperature > MAX_TEMPERATURE) {
     // if current temperature is over our hardcoded safety limit
     enterErrorState(F("Current temperature rose over safety limit!"));
+    //    Serial.println("temp over safety limit");
   }
+
+  //  Serial.println(status.currentTemperature);
 }
 
 char receivedChars[INPUT_BUFFER_SIZE];
@@ -203,6 +252,7 @@ uint32_t lastSentStatus = 0;
 void loop() {
   static StaticJsonDocument<32> commandJson;
 
+  //  logger.debug(F("Reading command"));
   if (receiveCommand()) {
     lastUiHeartbeat = millis();
 
@@ -239,34 +289,46 @@ void loop() {
         } else if (strcasecmp(logLevel, "CRITICAL") == 0) {
           logger.logLevel = LogLevel::CRITICAL;
         } else {
-          logger.warn("Invalid log level");
+          logger.warn(F("Invalid log level"));
         }
+      }
+
+      if (!commandPresent) {
+        logger.warn(F("No command present"));
       }
 
       newData = false;
     }
-  } else if (millis() - lastUiHeartbeat > UI_TIMEOUT) {
+  } else if (lastUiHeartbeat != 0 && millis() - lastUiHeartbeat > UI_TIMEOUT) {
     enterErrorState(F("UI timeout"));
   }
 
   // send status
   if (millis() - lastSentStatus > STATUS_SEND_INTERVAL) {
+    //    logger.debug(F("Sending status"));
     sendStatus();
     lastSentStatus = millis();
   }
 
+  //  logger.debug(F("Reading temperature"));
   readTemperature();
+
   if (status.state == State::ERROR) {
+    //    logger.debug(F("In error state, not controlling heating elements"));
     // make sure HEATING elements are off
     if (status.topHeatDutyCycle != 0 || status.bottomHeatDutyCycle != 0) {
       logger.warn("Heating elements should be off already! Turning off now...");
-      immediateStop();
+      //      immediateStop();
     }
+
+    delay(1);
     return;
   }
 
-  if (status.targetTemperature == 0) {
-    status.state = IDLE;
+  if (status.targetTemperature == 0 && status.state != State::IDLE) {
+    logger.debug(F("Target temperature is 0, resetting PID loop and disabling "
+                   "heating elements"));
+    status.state = State::IDLE;
     topHeatingElementPid.SetMode(QuickPID::Control::manual);
     topHeatingElementPid.Reset();
     bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
@@ -274,17 +336,22 @@ void loop() {
     status.topHeatDutyCycle = 0;
     status.bottomHeatDutyCycle = 0;
     heatingElementPwm.disableAll(); // disable timers while we aren't using them
-  } else if (status.currentTemperature > status.targetTemperature &&
+  } else if (status.targetTemperature != 0 &&
+             status.currentTemperature > status.targetTemperature &&
              status.currentTemperature - status.targetTemperature > 5) {
+    logger.info(F("Started cooling"));
     status.state = COOLING;
     bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);
-  } else if (status.targetTemperature > status.currentTemperature &&
+  } else if (status.targetTemperature != 0 &&
+             status.targetTemperature > status.currentTemperature &&
              status.targetTemperature - status.currentTemperature > 5) {
+    logger.info(F("Started heating"));
     status.state = HEATING;
     bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);
   }
 
   if (status.state != IDLE) {
+    logger.debug(F("Calculating duty cycles"));
     heatingElementPwm.enableAll();
     pidTargetTemperature = status.targetTemperature;
     pidCurrentTemperature = status.currentTemperature;
@@ -298,6 +365,7 @@ void loop() {
 
   if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
       status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {
+    logger.debug(F("Updating PWM"));
     // set PWM
     heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
                                        HEATING_ELEMENT_PWM_FREQUENCY,
@@ -311,4 +379,6 @@ void loop() {
     lastTopHeatDutyCycle = status.topHeatDutyCycle;
     lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
   }
+
+  delay(1);
 }

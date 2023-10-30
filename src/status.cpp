@@ -1,13 +1,12 @@
 #include "status.h"
 
-DynamicJsonDocument Status::toJson() const volatile {
-  DynamicJsonDocument statusJson(192);
+StaticJsonDocument<192> Status::toJson() const volatile {
+  StaticJsonDocument<192> statusJson;
   statusJson["targetTemperature"] = targetTemperature;
   statusJson["currentTemperature"] = currentTemperature;
   statusJson["topHeatDutyCycle"] = topHeatDutyCycle;
   statusJson["bottomHeatDutyCycle"] = bottomHeatDutyCycle;
   statusJson["isDoorOpen"] = isDoorOpen;
-  statusJson["error"] = error;
   // convert state enum value to string
   switch (state) {
   case State::IDLE:

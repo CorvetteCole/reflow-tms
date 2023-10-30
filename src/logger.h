@@ -14,19 +14,19 @@ class Logger {
 
 public:
   LogLevel logLevel = INFO;
-  void debug(const char *message) const;
+  void debug(const String &message) const;
 
   void debug(const __FlashStringHelper *message) const;
 
-  void info(const char *message) const;
+  void info(const String &message) const;
 
   void info(const __FlashStringHelper *message) const;
 
-  void warn(const char *message) const;
+  void warn(const String &message) const;
 
   void warn(const __FlashStringHelper *message) const;
 
-  void error(const char *message) const;
+  void error(const String &message) const;
 
   void error(const __FlashStringHelper *message) const;
 

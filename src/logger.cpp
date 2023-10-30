@@ -3,27 +3,29 @@
 //
 
 #include "logger.h"
-void Logger::debug(const char *message) const { log(LogLevel::DEBUG, message); }
+void Logger::debug(const String &message) const {
+  log(LogLevel::DEBUG, message);
+}
 void Logger::debug(const __FlashStringHelper *message) const {
   log(LogLevel::DEBUG, message);
 }
-void Logger::info(const char *message) const { log(LogLevel::INFO, message); }
+void Logger::info(const String &message) const { log(LogLevel::INFO, message); }
 void Logger::info(const __FlashStringHelper *message) const {
   log(LogLevel::INFO, message);
 }
-void Logger::warn(const char *message) const { log(LogLevel::WARN, message); }
+void Logger::warn(const String &message) const { log(LogLevel::WARN, message); }
 void Logger::warn(const __FlashStringHelper *message) const {
   log(LogLevel::WARN, message);
 }
-void Logger::error(const char *message) const {
+void Logger::error(const String &message) const {
   log(LogLevel::CRITICAL, message);
 }
 void Logger::error(const __FlashStringHelper *message) const {
   log(LogLevel::CRITICAL, message);
 }
-void Logger::log(LogLevel severity, const String& message) const {
+void Logger::log(LogLevel severity, const String &message) const {
   if (severity >= logLevel) {
-    DynamicJsonDocument logJson(256);
+    StaticJsonDocument<256> logJson;
     logJson["action"] = "log";
     logJson["time"] = millis();
     logJson["severity"] = logLevelToString(severity);
@@ -36,7 +38,7 @@ void Logger::log(LogLevel severity, const String& message) const {
 
 void Logger::log(LogLevel severity, const __FlashStringHelper *message) const {
   if (severity >= logLevel) {
-    DynamicJsonDocument logJson(256);
+    StaticJsonDocument<256> logJson;
     logJson["action"] = "log";
     logJson["time"] = millis();
     logJson["severity"] = logLevelToString(severity);
