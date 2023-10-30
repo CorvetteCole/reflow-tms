@@ -29,30 +29,17 @@
 // 100.0 for PT100, 1000.0 for PT1000
 #define RNOMINAL 100.0
 
-#define UI_TIMEOUT 25000 // in milliseconds
+#define UI_TIMEOUT 200 // in milliseconds
 #define STATUS_SEND_INTERVAL 1000 // ms
 
-// enum Error {
-//   doorOpenedDuringHeating,
-//   targetTemperatureTooLow,
-//   targetTemperatureTooHigh,
-//   currentTemperatureTooHigh,
-//   currentTemperatureTooLow,
-//   currentTemperatureNotRisingDuringHeating,
-//   currentTemperatureUnstable,
-//   uiTimeout,
-//   noError
-// };
-
-// typedef struct {
-//   uint16_t targetTemperature; // in degrees Celsius
-//   uint16_t currentTemperature;
-//   uint8_t topHeatDutyCycle;
-//   uint8_t bottomHeatDutyCycle;
-//   bool isDoorOpen;
-//   Error error;
-//   State state;
-//   CommunicationMode communicationMode;
-// } Status;
+// binary error codes (can be combined)
+#define ERROR_DOOR_OPENED_DURING_HEATING 0b00000001
+#define ERROR_TARGET_TEMPERATURE_TOO_LOW 0b00000010
+#define ERROR_TARGET_TEMPERATURE_TOO_HIGH 0b00000100
+#define ERROR_CURRENT_TEMPERATURE_TOO_HIGH 0b00001000
+#define ERROR_CURRENT_TEMPERATURE_TOO_LOW 0b00010000
+#define ERROR_CURRENT_TEMPERATURE_NOT_RISING_DURING_HEATING 0b00100000
+#define ERROR_CURRENT_TEMPERATURE_FAULT 0b01000000
+#define ERROR_UI_TIMEOUT 0b10000000
 
 #endif // REFLOW_TMS_CONSTANTS_H

@@ -7,6 +7,7 @@ StaticJsonDocument<192> Status::toJson() const volatile {
   statusJson["topHeatDutyCycle"] = topHeatDutyCycle;
   statusJson["bottomHeatDutyCycle"] = bottomHeatDutyCycle;
   statusJson["isDoorOpen"] = isDoorOpen;
+  statusJson["error"] = error;
   // convert state enum value to string
   switch (state) {
   case State::IDLE:

@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <QuickPID.h>
-#include <SimpleTimer.h>
 #define USE_TIMER_1 true
 #define USING_MICROS_RESOLUTION true
 
@@ -9,6 +8,7 @@
 #include "constants.h"
 #include "logger.h"
 #include "status.h"
+#include "utils.cpp"
 #include <AVR_Slow_PWM.h>
 #include <Adafruit_MAX31865.h>
 
@@ -31,7 +31,7 @@ QuickPID bottomHeatingElementPid(&pidCurrentTemperature,
 
 Adafruit_MAX31865 max31865 = Adafruit_MAX31865(CS_PIN, DI_PIN, DO_PIN, CLK_PIN);
 
-Logger logger = Logger(LogLevel::WARN);
+Logger logger = Logger(LogLevel::DEBUG);
 
 void pwmTimerHandler() { heatingElementPwm.run(); }
 
@@ -42,7 +42,7 @@ void immediateStop() {
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
-//  heatingElementPwm.disableAll();
+  //  heatingElementPwm.disableAll();
 
   status.topHeatDutyCycle = 0;
   status.bottomHeatDutyCycle = 0;
@@ -53,42 +53,31 @@ void sendStatus() {
   Serial.println();
 }
 
-void enterErrorState(const String &error) {
+void enterErrorState(uint8_t error) {
   if (status.state != State::ERROR) {
-    status.state = State::ERROR;
-    logger.error(error);
     immediateStop();
-    sendStatus(); // immediately update status
-  } else {
-    logger.warn("An additional error occurred!");
-    logger.warn(error);
+    status.state = State::ERROR;
   }
-}
-
-void enterErrorState(const __FlashStringHelper *error) {
-  if (status.state != State::ERROR) {
-    status.state = State::ERROR;
-    logger.error(error);
-    immediateStop();
+  if (!(status.error & error)) {
+    // this is a new error!
+    status.error |= error;
+    logger.error(ovenErrorToString(error));
     sendStatus(); // immediately update status
-  } else {
-    logger.warn("An additional error occurred!");
-    logger.warn(error);
   }
 }
 
 void doorChanged() {
   // TODO this method breaks things
   status.isDoorOpen = digitalRead(DOOR_PIN);
-  if (status.isDoorOpen) {
+//  if (status.isDoorOpen) {
     //    logger.info(F("Door opened"));
-  } else {
+//  } else {
     //    logger.info(F("Door closed"));
-  }
+//  }
 
   if (status.state == HEATING && status.isDoorOpen) {
     // TODO: FIXME
-    //    enterErrorState("Door opened during HEATING");
+    enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
   }
 }
 
@@ -178,7 +167,7 @@ void readTemperature() {
   uint8_t fault = max31865.readFault();
   if (fault) {
     // TODO do more?
-    enterErrorState(F("Fault when reading temperature sensor"));
+    enterErrorState(ERROR_CURRENT_TEMPERATURE_FAULT);
 
     if (fault & MAX31865_FAULT_HIGHTHRESH) {
       logger.error(F("RTD High Threshold"));
@@ -205,8 +194,7 @@ void readTemperature() {
 
   if (status.currentTemperature > MAX_TEMPERATURE) {
     // if current temperature is over our hardcoded safety limit
-    enterErrorState(F("Current temperature rose over safety limit!"));
-    //    Serial.println("temp over safety limit");
+    enterErrorState(ERROR_CURRENT_TEMPERATURE_TOO_HIGH);
   }
 
   //  Serial.println(status.currentTemperature);
@@ -256,30 +244,22 @@ uint32_t lastUiHeartbeat = 0;
 uint32_t lastSentStatus = 0;
 
 // TODO:
-// - figure out why erroring doesn't actually set the output to off every time (!!)
-// - figure out the funkiness with the pid loop integral which seems to get weird if you go between idle and heating states many times
-// - figure out possible memory issues which cause a crash on error after awhile (I'm leaking memory somewhere....)
-
+// - figure out why erroring doesn't actually set the output to off every time
+// (!!)
+// - figure out the funkiness with the pid loop integral which seems to get
+// weird if you go between idle and heating states many times
+// - figure out possible memory issues which cause a crash on error after awhile
+// (I'm leaking memory somewhere....)
 
 void loop() {
   static StaticJsonDocument<32> commandJson;
 
-  if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
-      status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {
-    //    logger.debug(F("Updating PWM"));
-    // set PWM
-    heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
-                                       HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.topHeatDutyCycle);
-    heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
-                                       HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.bottomHeatDutyCycle);
-    heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
-                                       HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.bottomHeatDutyCycle);
-    lastTopHeatDutyCycle = status.topHeatDutyCycle;
-    lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
+  status.isDoorOpen = digitalRead(DOOR_PIN);
+  if (status.state == HEATING && status.isDoorOpen) {
+    enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
   }
+  //  logger.debug(F("Reading temperature"));
+  readTemperature();
 
   //  logger.debug(F("Reading command"));
   if (receiveCommand()) {
@@ -330,20 +310,16 @@ void loop() {
 
       newData = false;
     }
-  } else if (lastUiHeartbeat != 0 && millis() - lastUiHeartbeat > UI_TIMEOUT && status.state != State::ERROR) {
-    enterErrorState(F("UI timeout"));
-//    delay(500);
+  } else if (lastUiHeartbeat != 0 && millis() - lastUiHeartbeat > UI_TIMEOUT) {
+    enterErrorState(ERROR_UI_TIMEOUT);
   }
 
   // send status
   if (millis() - lastSentStatus > STATUS_SEND_INTERVAL) {
-    //    logger.debug(F("Sending status"));
     sendStatus();
     lastSentStatus = millis();
   }
 
-  //  logger.debug(F("Reading temperature"));
-  readTemperature();
 
   if (status.state == State::ERROR) {
     //    logger.debug(F("In error state, not controlling heating elements"));
@@ -368,7 +344,8 @@ void loop() {
     bottomHeatingElementPid.Reset();
     status.topHeatDutyCycle = 0;
     status.bottomHeatDutyCycle = 0;
-//    heatingElementPwm.disableAll(); // disable timers while we aren't using them
+    //    heatingElementPwm.disableAll(); // disable timers while we aren't
+    //    using them
   } else if (status.state != State::COOLING && status.targetTemperature != 0 &&
              status.currentTemperature > status.targetTemperature &&
              status.currentTemperature - status.targetTemperature > 5) {
@@ -388,13 +365,30 @@ void loop() {
     //    heatingElementPwm.enableAll();
     pidTargetTemperature = status.targetTemperature;
     pidCurrentTemperature = status.currentTemperature;
-//    topHeatingElementPid.Compute();
+    //    topHeatingElementPid.Compute();
     bottomHeatingElementPid.Compute();
     // we can statically cast to uint8_t because the output limits are set to
     // 0-100
-//    status.topHeatDutyCycle = static_cast<uint8_t>(pidTopHeatDutyCycle);
+    //    status.topHeatDutyCycle = static_cast<uint8_t>(pidTopHeatDutyCycle);
     status.topHeatDutyCycle = static_cast<uint8_t>(pidBottomHeatDutyCycle);
     status.bottomHeatDutyCycle = static_cast<uint8_t>(pidBottomHeatDutyCycle);
+  }
+
+  if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
+      status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {
+    //    logger.debug(F("Updating PWM"));
+    // set PWM
+    heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
+                                       HEATING_ELEMENT_PWM_FREQUENCY,
+                                       status.topHeatDutyCycle);
+    heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
+                                       HEATING_ELEMENT_PWM_FREQUENCY,
+                                       status.bottomHeatDutyCycle);
+    heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
+                                       HEATING_ELEMENT_PWM_FREQUENCY,
+                                       status.bottomHeatDutyCycle);
+    lastTopHeatDutyCycle = status.topHeatDutyCycle;
+    lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
   }
 
   delay(1);

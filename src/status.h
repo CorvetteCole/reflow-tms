@@ -3,6 +3,8 @@
 #ifndef REFLOW_TMS_STATUS_H
 #define REFLOW_TMS_STATUS_H
 
+
+
 enum State { IDLE, HEATING, COOLING, ERROR };
 
 class Status {
@@ -13,6 +15,7 @@ public:
   uint8_t bottomHeatDutyCycle{};
   bool isDoorOpen = false;
   State state = IDLE;
+  uint8_t error = 0;
 
   StaticJsonDocument<192> toJson() const volatile;
 };
