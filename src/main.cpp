@@ -362,7 +362,7 @@ void loop() {
     bottomHeatingElementPid.Reset();
     status.topHeatDutyCycle = 0;
     status.bottomHeatDutyCycle = 0;
-    heatingElementPwm.disableAll(); // disable timers while we aren't using them
+//    heatingElementPwm.disableAll(); // disable timers while we aren't using them
   } else if (status.state != State::COOLING && status.targetTemperature != 0 &&
              status.currentTemperature > status.targetTemperature &&
              status.currentTemperature - status.targetTemperature > 5) {
