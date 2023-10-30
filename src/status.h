@@ -5,7 +5,7 @@
 
 
 
-enum State { IDLE, HEATING, COOLING, ERROR };
+enum class State { IDLE, HEATING, COOLING, ERROR };
 
 class Status {
 public:
@@ -14,10 +14,10 @@ public:
   uint8_t topHeatDutyCycle{};
   uint8_t bottomHeatDutyCycle{};
   bool isDoorOpen = false;
-  State state = IDLE;
+  State state = State::IDLE;
   uint8_t error = 0;
 
-  StaticJsonDocument<192> toJson() const volatile;
+  StaticJsonDocument<192> toJson() const;
 };
 
 #endif // REFLOW_TMS_STATUS_H

@@ -30,7 +30,7 @@
 #define RNOMINAL 100.0
 
 #define UI_TIMEOUT 200 // in milliseconds
-#define STATUS_SEND_INTERVAL 1000 // ms
+#define STATUS_SEND_INTERVAL 100 // ms
 
 // binary error codes (can be combined)
 #define ERROR_DOOR_OPENED_DURING_HEATING 0b00000001

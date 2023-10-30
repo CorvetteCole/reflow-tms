@@ -1,6 +1,6 @@
 #include "status.h"
 
-StaticJsonDocument<192> Status::toJson() const volatile {
+StaticJsonDocument<192> Status::toJson() const {
   StaticJsonDocument<192> statusJson;
   statusJson["targetTemperature"] = targetTemperature;
   statusJson["currentTemperature"] = currentTemperature;

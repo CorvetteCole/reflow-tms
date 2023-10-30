@@ -17,7 +17,7 @@
 
 AVR_Slow_PWM heatingElementPwm;
 
-volatile Status status;
+Status status;
 
 float pidCurrentTemperature, pidTargetTemperature, pidTopHeatDutyCycle,
     pidBottomHeatDutyCycle;
@@ -66,21 +66,6 @@ void enterErrorState(uint8_t error) {
   }
 }
 
-void doorChanged() {
-  // TODO this method breaks things
-  status.isDoorOpen = digitalRead(DOOR_PIN);
-//  if (status.isDoorOpen) {
-    //    logger.info(F("Door opened"));
-//  } else {
-    //    logger.info(F("Door closed"));
-//  }
-
-  if (status.state == HEATING && status.isDoorOpen) {
-    // TODO: FIXME
-    enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
-  }
-}
-
 void (*resetFunc)() = nullptr;
 
 void setup() {
@@ -114,7 +99,6 @@ void setup() {
 
   logger.debug(F("Attaching interrupts..."));
 
-  //  attachInterrupt(digitalPinToInterrupt(DOOR_PIN), doorChanged, CHANGE);
   //  attachInterrupt(digitalPinToInterrupt(RESET_PIN), resetFunc, FALLING);
 
   logger.debug(F("Initializing PWM..."));
@@ -255,7 +239,7 @@ void loop() {
   static StaticJsonDocument<32> commandJson;
 
   status.isDoorOpen = digitalRead(DOOR_PIN);
-  if (status.state == HEATING && status.isDoorOpen) {
+  if (status.state == State::HEATING && status.isDoorOpen) {
     enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
   }
   //  logger.debug(F("Reading temperature"));
@@ -350,17 +334,17 @@ void loop() {
              status.currentTemperature > status.targetTemperature &&
              status.currentTemperature - status.targetTemperature > 5) {
     logger.info(F("Started cooling"));
-    status.state = COOLING;
+    status.state = State::COOLING;
     bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);
   } else if (status.state != State::HEATING && status.targetTemperature != 0 &&
              status.targetTemperature > status.currentTemperature &&
              status.targetTemperature - status.currentTemperature > 5) {
     logger.info(F("Started heating"));
-    status.state = HEATING;
+    status.state = State::HEATING;
     bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);
   }
 
-  if (status.state != IDLE) {
+  if (status.state != State::IDLE) {
     //    logger.debug(F("Calculating duty cycles"));
     //    heatingElementPwm.enableAll();
     pidTargetTemperature = status.targetTemperature;
