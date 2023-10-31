@@ -54,9 +54,9 @@ void sendStatus() {
 }
 
 void enterErrorState(uint8_t error) {
-  if (status.state != State::ERROR) {
+  if (status.state != State::FAULT) {
     immediateStop();
-    status.state = State::ERROR;
+    status.state = State::FAULT;
   }
   if (!(status.error & error)) {
     // this is a new error!
@@ -143,11 +143,11 @@ void readTemperature() {
   float ratio = rtd;
   ratio /= 32768;
 
-//  logger.debug(String("RTD value: ") + String(rtd, 8));
-//  logger.debug(String("Ratio: ") + String(ratio, 8));
-//  logger.debug(String("Resistance: ") + String(RREF * ratio, 8));
-//  delay(100);
-//  logger.debug(String("Temperature: ") + String(temperature, 8));
+  //  logger.debug(String("RTD value: ") + String(rtd, 8));
+  //  logger.debug(String("Ratio: ") + String(ratio, 8));
+  //  logger.debug(String("Resistance: ") + String(RREF * ratio, 8));
+  //  delay(100);
+  //  logger.debug(String("Temperature: ") + String(temperature, 8));
 
   uint8_t fault = max31865.readFault();
   if (fault) {
@@ -302,7 +302,7 @@ void loop() {
     lastSentStatus = millis();
   }
 
-  if (status.state == State::ERROR) {
+  if (status.state == State::FAULT) {
     //    logger.debug(F("In error state, not controlling heating elements"));
     // make sure HEATING elements are off
     if (status.topHeatDutyCycle != 0 || status.bottomHeatDutyCycle != 0) {
