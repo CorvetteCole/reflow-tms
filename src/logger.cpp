@@ -1,7 +1,5 @@
 #include "logger.h"
 
-const char *const LogLevelStrings[] = {"DEBUG", "INFO", "WARN", "CRITICAL"};
-
 void Logger::debug(const String &message) const {
   log(LogLevel::DEBUG, message);
 }
@@ -27,7 +25,7 @@ void Logger::log(LogLevel severity, const String &message) const {
   if (severity >= logLevel) {
     StaticJsonDocument<256> logJson;
     logJson["time"] = millis();
-    logJson["severity"] = LogLevelStrings[severity];
+    logJson["severity"] = logLevelStrings[severity];
     logJson["message"] = message;
 
     serializeJson(logJson, Serial);
@@ -39,7 +37,7 @@ void Logger::log(LogLevel severity, const __FlashStringHelper *message) const {
   if (severity >= logLevel) {
     StaticJsonDocument<256> logJson;
     logJson["time"] = millis();
-    logJson["severity"] = LogLevelStrings[severity];
+    logJson["severity"] = logLevelStrings[severity];
     logJson["message"] = message;
 
     serializeJson(logJson, Serial);

@@ -36,7 +36,7 @@ public:
   Logger() = default;
 
 private:
-  const char *const LogLevelStrings[4] = {"DEBUG", "INFO", "WARN", "CRITICAL"};
+  const char *const logLevelStrings[4] = {"DEBUG", "INFO", "WARN", "CRITICAL"};
 };
 
 #endif // REFLOW_TMS_LOGGER_H
