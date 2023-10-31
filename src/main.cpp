@@ -55,8 +55,8 @@ void sendStatus() {
 
 void enterErrorState(uint8_t error) {
   if (status.state != State::FAULT) {
-//    immediateStop();
-//    status.state = State::FAULT;
+    //    immediateStop();
+    //    status.state = State::FAULT;
   }
   if (!(status.error & error)) {
     // this is a new error!
@@ -285,6 +285,35 @@ void loop() {
       if (commandJson["reset"] != nullptr) {
         logger.warn(F("Resetting..."));
         resetFunc();
+      }
+
+      if (commandJson["pid_tune"] != nullptr) {
+        float kp = commandJson["kp"];
+        float ki = commandJson["ki"];
+        float kd = commandJson["kd"];
+        if (commandJson["pid"] == "top") {
+          topHeatingElementPid.SetTunings(kp, ki, kd);
+        } else if (commandJson["pid"] == "bottom") {
+          bottomHeatingElementPid.SetTunings(kp, ki, kd);
+        } else if (commandJson["pid"] == "both") {
+          topHeatingElementPid.SetTunings(kp, ki, kd);
+          bottomHeatingElementPid.SetTunings(kp, ki, kd);
+        } else {
+          logger.warn(F("Invalid PID command"));
+        }
+      }
+
+      if (commandJson["pid_reset"] != nullptr) {
+        if (commandJson["reset_pid"] == "top") {
+          topHeatingElementPid.Reset();
+        } else if (commandJson["reset_pid"] == "bottom") {
+          bottomHeatingElementPid.Reset();
+        } else if (commandJson["reset_pid"] == "both") {
+          topHeatingElementPid.Reset();
+          bottomHeatingElementPid.Reset();
+        } else {
+          logger.warn(F("Invalid PID reset command"));
+        }
       }
 
       if (!commandPresent) {
