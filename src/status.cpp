@@ -1,7 +1,7 @@
 #include "status.h"
 
-StaticJsonDocument<192> Status::toJson() const {
-  StaticJsonDocument<192> statusJson;
+StaticJsonDocument<96> Status::toJson() const {
+  StaticJsonDocument<96> statusJson;
   statusJson["targetTemperature"] = targetTemperature;
   statusJson["currentTemperature"] = currentTemperature;
   statusJson["topHeatDutyCycle"] = topHeatDutyCycle;

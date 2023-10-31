@@ -15,7 +15,7 @@ public:
   State state = State::IDLE;
   uint8_t error = 0;
 
-  StaticJsonDocument<192> toJson() const;
+  StaticJsonDocument<96> toJson() const;
 
 private:
   const char *const stateStrings[4] = {"DEBUG", "INFO", "WARN", "CRITICAL"};
