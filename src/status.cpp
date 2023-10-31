@@ -7,7 +7,7 @@ StaticJsonDocument<128> Status::toJson() const {
   statusJson[F("state")] = stateStrings[state];
   statusJson[F("top")] = topHeatDutyCycle;
   statusJson[F("bottom")] = bottomHeatDutyCycle;
-  statusJson[F("door_open")] = isDoorOpen;
+  statusJson[F("door")] = isDoorOpen ? F("open") : F("closed");
   statusJson[F("error")] = error;
   return statusJson;
 }
