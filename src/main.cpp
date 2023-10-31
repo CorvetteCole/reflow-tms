@@ -282,6 +282,11 @@ void loop() {
         }
       }
 
+      if (commandJson["reset"] != nullptr) {
+        logger.warn(F("Resetting..."));
+        resetFunc();
+      }
+
       if (!commandPresent) {
         logger.warn(F("No command present, received: "));
         serializeJson(commandJson, Serial);
