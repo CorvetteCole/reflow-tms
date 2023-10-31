@@ -69,7 +69,7 @@ void enterErrorState(uint8_t error) {
 void (*resetFunc)() = nullptr;
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(230400);
   while (!Serial && !Serial.available()) {
   }
 
