@@ -128,8 +128,6 @@ void setup() {
 
   max31865.begin(MAX31865_3WIRE);
 
-  delay(1000);
-
   logger.info(F("Thermal management system started"));
 }
 
@@ -267,7 +265,7 @@ void loop() {
         }
       }
 
-      if (commandJson["target"] != nullptr) {
+      if (commandJson["log"] != nullptr) {
         commandPresent = true;
         const char *logLevel = commandJson["log"];
         if (strcasecmp(logLevel, "DEBUG") == 0) {
