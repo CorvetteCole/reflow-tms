@@ -115,10 +115,9 @@ void setup() {
 
   logger.debug(F("Initializing PID..."));
 
-    topHeatingElementPid.SetOutputLimits(0, 100);
-    topHeatingElementPid.SetTunings(
-        TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI,
-        TOP_HEATING_ELEMENT_KD);
+  topHeatingElementPid.SetOutputLimits(0, 100);
+  topHeatingElementPid.SetTunings(
+      TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI, TOP_HEATING_ELEMENT_KD);
 
   bottomHeatingElementPid.SetOutputLimits(0, 100);
   bottomHeatingElementPid.SetTunings(BOTTOM_HEATING_ELEMENT_KP,
@@ -258,9 +257,10 @@ void loop() {
       if (commandJson["target"] != nullptr) {
         commandPresent = true;
         float targetTemperature = commandJson["target"];
-        if (targetTemperature < 0 ||
-            targetTemperature > MAX_TARGET_TEMPERATURE) {
-          logger.warn(F("Invalid target temperature"));
+        if (targetTemperature < MIN_TARGET_TEMPERATURE) {
+          enterErrorState(ERROR_TARGET_TEMPERATURE_TOO_LOW);
+        } else if (targetTemperature > MAX_TARGET_TEMPERATURE) {
+          enterErrorState(ERROR_TARGET_TEMPERATURE_TOO_HIGH);
         } else {
           status.targetTemperature = targetTemperature;
         }
@@ -328,10 +328,12 @@ void loop() {
       //    using them
     }
   } else {
-    if (status.state != State::COOLING && status.currentTemperature > status.targetTemperature) {
+    if (status.state != State::COOLING &&
+        status.currentTemperature > status.targetTemperature) {
       logger.info(F("Started cooling"));
       status.state = State::COOLING;
-    } else if (status.state != State::HEATING && status.targetTemperature > status.currentTemperature) {
+    } else if (status.state != State::HEATING &&
+               status.targetTemperature > status.currentTemperature) {
       logger.info(F("Started heating"));
       status.state = State::HEATING;
       digitalWrite(FAN_PIN, HIGH);
@@ -349,7 +351,6 @@ void loop() {
     // 0-100
     status.topHeatDutyCycle = static_cast<uint8_t>(pidTopHeatDutyCycle);
     status.bottomHeatDutyCycle = static_cast<uint8_t>(pidBottomHeatDutyCycle);
-
   }
 
   if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
