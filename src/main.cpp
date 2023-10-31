@@ -22,8 +22,8 @@ Status status;
 float pidCurrentTemperature, pidTargetTemperature, pidTopHeatDutyCycle,
     pidBottomHeatDutyCycle;
 
-QuickPID topHeatingElementPid(&pidCurrentTemperature, &pidTopHeatDutyCycle,
-                              &pidTargetTemperature);
+// QuickPID topHeatingElementPid(&pidCurrentTemperature, &pidTopHeatDutyCycle,
+//                               &pidTargetTemperature);
 
 QuickPID bottomHeatingElementPid(&pidCurrentTemperature,
                                  &pidBottomHeatDutyCycle,
@@ -79,12 +79,11 @@ void setup() {
   logger.debug(F("Initializing ITimer1..."));
 
   ITimer1.init();
-  delay(100);
 
   logger.debug(F("Attaching ITimer1 interrupt..."));
 
   if (ITimer1.attachInterrupt(HW_TIMER_INTERVAL_FREQ, pwmTimerHandler)) {
-    logger.debug(F("Starting  ITimer1 OK"));
+    logger.debug(F("Starting ITimer1 OK"));
   } else {
     logger.error(
         F("Can't set ITimer1 correctly. Select another freq. or timer"));
@@ -115,9 +114,10 @@ void setup() {
 
   logger.debug(F("Initializing PID..."));
 
-  topHeatingElementPid.SetOutputLimits(0, 100);
-  topHeatingElementPid.SetTunings(
-      TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI, TOP_HEATING_ELEMENT_KD);
+  //  topHeatingElementPid.SetOutputLimits(0, 100);
+  //  topHeatingElementPid.SetTunings(
+  //      TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI,
+  //      TOP_HEATING_ELEMENT_KD);
 
   bottomHeatingElementPid.SetOutputLimits(0, 100);
   bottomHeatingElementPid.SetTunings(BOTTOM_HEATING_ELEMENT_KP,
@@ -140,10 +140,10 @@ void readTemperature() {
   uint16_t rtd = max31865.readRTD();
   float temperature = max31865.temperature(RNOMINAL, RREF);
   // format strings and print debug
-  float ratio = rtd;
-  ratio /= 32768;
+  //  float ratio = rtd;
+  //  ratio /= 32768;
 
-  //  logger.debug(String("RTD value: ") + String(rtd, 8));
+  //    logger.debug((String("RTD value: ") + String(rtd, 8)).c_str());
   //  logger.debug(String("Ratio: ") + String(ratio, 8));
   //  logger.debug(String("Resistance: ") + String(RREF * ratio, 8));
   //  delay(100);
@@ -310,8 +310,6 @@ void loop() {
       immediateStop();
       delay(500);
     }
-
-    delay(1);
     return;
   }
 
@@ -319,8 +317,8 @@ void loop() {
     logger.debug(F("Target temperature is 0, resetting PID loop and disabling "
                    "heating elements"));
     status.state = State::IDLE;
-    topHeatingElementPid.SetMode(QuickPID::Control::manual);
-    topHeatingElementPid.Reset();
+    //    topHeatingElementPid.SetMode(QuickPID::Control::manual);
+    //    topHeatingElementPid.Reset();
     bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
     bottomHeatingElementPid.Reset();
     status.topHeatDutyCycle = 0;
@@ -369,6 +367,4 @@ void loop() {
     lastTopHeatDutyCycle = status.topHeatDutyCycle;
     lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
   }
-
-  delay(1);
 }
