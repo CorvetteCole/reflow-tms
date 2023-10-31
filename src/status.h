@@ -3,9 +3,7 @@
 #ifndef REFLOW_TMS_STATUS_H
 #define REFLOW_TMS_STATUS_H
 
-
-
-enum class State { IDLE, HEATING, COOLING, ERROR };
+enum State { IDLE, HEATING, COOLING, FAULT };
 
 class Status {
 public:
@@ -18,6 +16,9 @@ public:
   uint8_t error = 0;
 
   StaticJsonDocument<192> toJson() const;
+
+private:
+  const char *const stateStrings[4] = {"DEBUG", "INFO", "WARN", "CRITICAL"};
 };
 
 #endif // REFLOW_TMS_STATUS_H
