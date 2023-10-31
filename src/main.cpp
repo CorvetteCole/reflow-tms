@@ -22,8 +22,8 @@ Status status;
 float pidCurrentTemperature, pidTargetTemperature, pidTopHeatDutyCycle,
     pidBottomHeatDutyCycle;
 
-// QuickPID topHeatingElementPid(&pidCurrentTemperature, &pidTopHeatDutyCycle,
-//                               &pidTargetTemperature);
+QuickPID topHeatingElementPid(&pidCurrentTemperature, &pidTopHeatDutyCycle,
+                              &pidTargetTemperature);
 
 QuickPID bottomHeatingElementPid(&pidCurrentTemperature,
                                  &pidBottomHeatDutyCycle,
@@ -55,8 +55,8 @@ void sendStatus() {
 
 void enterErrorState(uint8_t error) {
   if (status.state != State::FAULT) {
-    immediateStop();
-    status.state = State::FAULT;
+//    immediateStop();
+//    status.state = State::FAULT;
   }
   if (!(status.error & error)) {
     // this is a new error!
@@ -91,6 +91,7 @@ void setup() {
 
   // initialize built-in LED pin as an output (will blink on heartbeat)
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(FAN_PIN, OUTPUT);
 
   // initialize door sensor pin as an input
   pinMode(DOOR_PIN, INPUT_PULLUP);
@@ -114,10 +115,10 @@ void setup() {
 
   logger.debug(F("Initializing PID..."));
 
-  //  topHeatingElementPid.SetOutputLimits(0, 100);
-  //  topHeatingElementPid.SetTunings(
-  //      TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI,
-  //      TOP_HEATING_ELEMENT_KD);
+    topHeatingElementPid.SetOutputLimits(0, 100);
+    topHeatingElementPid.SetTunings(
+        TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI,
+        TOP_HEATING_ELEMENT_KD);
 
   bottomHeatingElementPid.SetOutputLimits(0, 100);
   bottomHeatingElementPid.SetTunings(BOTTOM_HEATING_ELEMENT_KP,
@@ -310,42 +311,45 @@ void loop() {
     return;
   }
 
-  if (status.targetTemperature == 0 && status.state != State::IDLE) {
-    logger.debug(F("Target temperature is 0, resetting PID loop and disabling "
-                   "heating elements"));
-    status.state = State::IDLE;
-    //    topHeatingElementPid.SetMode(QuickPID::Control::manual);
-    //    topHeatingElementPid.Reset();
-    bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
-    bottomHeatingElementPid.Reset();
-    status.topHeatDutyCycle = 0;
-    status.bottomHeatDutyCycle = 0;
-    //    heatingElementPwm.disableAll(); // disable timers while we aren't
-    //    using them
-  } else if (status.state != State::COOLING && status.targetTemperature != 0 &&
-             status.currentTemperature > status.targetTemperature) {
-    logger.info(F("Started cooling"));
-    status.state = State::COOLING;
-    bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);
-  } else if (status.state != State::HEATING && status.targetTemperature != 0 &&
-             status.targetTemperature > status.currentTemperature) {
-    logger.info(F("Started heating"));
-    status.state = State::HEATING;
-    bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);
-  }
+  if (status.targetTemperature == 0) {
+    if (status.state != State::IDLE) {
+      logger.debug(
+          F("Target temperature is 0, resetting PID loop and disabling "
+            "heating elements"));
+      status.state = State::IDLE;
+      topHeatingElementPid.SetMode(QuickPID::Control::manual);
+      topHeatingElementPid.Reset();
+      bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
+      bottomHeatingElementPid.Reset();
+      status.topHeatDutyCycle = 0;
+      status.bottomHeatDutyCycle = 0;
+      digitalWrite(FAN_PIN, LOW);
+      //    heatingElementPwm.disableAll(); // disable timers while we aren't
+      //    using them
+    }
+  } else {
+    if (status.state != State::COOLING && status.currentTemperature > status.targetTemperature) {
+      logger.info(F("Started cooling"));
+      status.state = State::COOLING;
+    } else if (status.state != State::HEATING && status.targetTemperature > status.currentTemperature) {
+      logger.info(F("Started heating"));
+      status.state = State::HEATING;
+      digitalWrite(FAN_PIN, HIGH);
+      topHeatingElementPid.SetMode(QuickPID::Control::automatic);
+      bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);
+    }
 
-  if (status.state != State::IDLE) {
     //    logger.debug(F("Calculating duty cycles"));
     //    heatingElementPwm.enableAll();
     pidTargetTemperature = status.targetTemperature;
     pidCurrentTemperature = status.currentTemperature;
-    //    topHeatingElementPid.Compute();
+    topHeatingElementPid.Compute();
     bottomHeatingElementPid.Compute();
     // we can statically cast to uint8_t because the output limits are set to
     // 0-100
-    //    status.topHeatDutyCycle = static_cast<uint8_t>(pidTopHeatDutyCycle);
-    status.topHeatDutyCycle = static_cast<uint8_t>(pidBottomHeatDutyCycle);
+    status.topHeatDutyCycle = static_cast<uint8_t>(pidTopHeatDutyCycle);
     status.bottomHeatDutyCycle = static_cast<uint8_t>(pidBottomHeatDutyCycle);
+
   }
 
   if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
