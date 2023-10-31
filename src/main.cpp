@@ -139,15 +139,16 @@ void setup() {
 void readTemperature() {
   uint16_t rtd = max31865.readRTD();
   float temperature = max31865.temperature(RNOMINAL, RREF);
-  // format strings and print debug
-  //  float ratio = rtd;
-  //  ratio /= 32768;
 
-  //    logger.debug((String("RTD value: ") + String(rtd, 8)).c_str());
-  //  logger.debug(String("Ratio: ") + String(ratio, 8));
-  //  logger.debug(String("Resistance: ") + String(RREF * ratio, 8));
-  //  delay(100);
-  //  logger.debug(String("Temperature: ") + String(temperature, 8));
+  if (logger.logLevel == LogLevel::DEBUG) {
+    // format strings and print debug
+    float ratio = rtd;
+    ratio /= 32768;
+
+    logger.debug((String("RTD value: ") + String(rtd, 8)).c_str());
+    logger.debug((String("Resistance: ") + String(RREF * ratio, 8)).c_str());
+    logger.debug((String("Temperature: ") + String(temperature, 8)).c_str());
+  }
 
   uint8_t fault = max31865.readFault();
   if (fault) {
@@ -173,12 +174,14 @@ void readTemperature() {
     }
     delay(100);
   }
+  status.currentTemperature = temperature;
 
-  status.currentTemperature = static_cast<uint16_t>(temperature);
-
-  if (status.currentTemperature > MAX_TEMPERATURE) {
+  if (temperature > MAX_TEMPERATURE) {
     // if current temperature is over our hardcoded safety limit
     enterErrorState(ERROR_CURRENT_TEMPERATURE_TOO_HIGH);
+  } else if (temperature < MIN_TEMPERATURE) {
+    // temperature is an unsigned int, so this is a sign that something is wrong
+    enterErrorState(ERROR_CURRENT_TEMPERATURE_TOO_LOW);
   }
 }
 
@@ -230,8 +233,6 @@ uint32_t lastSentStatus = 0;
 // (!!)
 // - figure out the funkiness with the pid loop integral which seems to get
 // weird if you go between idle and heating states many times
-// - figure out possible memory issues which cause a crash on error after awhile
-// (I'm leaking memory somewhere....)
 
 void loop() {
   static StaticJsonDocument<32> commandJson;
