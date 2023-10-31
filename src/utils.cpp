@@ -1,7 +1,7 @@
 #include "constants.h"
 #include <Arduino.h>
 
-inline const __FlashStringHelper* ovenErrorToString(uint8_t error) {
+inline const __FlashStringHelper *ovenErrorToString(uint8_t error) {
   switch (error) {
   case ERROR_DOOR_OPENED_DURING_HEATING:
     return F("Door opened during heating");
