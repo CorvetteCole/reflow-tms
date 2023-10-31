@@ -9,6 +9,7 @@
 #define BOTTOM_HEATING_ELEMENT_PIN 10
 #define DOOR_PIN 2
 #define RESET_PIN 3
+#define FAN_PIN 4
 #define CS_PIN 14
 #define DI_PIN 15
 #define DO_PIN 16
@@ -29,8 +30,8 @@
 // 100.0 for PT100, 1000.0 for PT1000
 #define RNOMINAL 100.0
 
-#define UI_TIMEOUT 1000 // in milliseconds
-#define STATUS_SEND_INTERVAL 100 // ms
+#define UI_TIMEOUT 1000          // in milliseconds
+#define STATUS_SEND_INTERVAL 150 // ms
 
 // binary error codes (can be combined)
 #define ERROR_DOOR_OPENED_DURING_HEATING 0b00000001

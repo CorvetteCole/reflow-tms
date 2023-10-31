@@ -13,7 +13,7 @@
 #include <Adafruit_MAX31865.h>
 
 // Don't change these numbers to make higher Timer freq. System can hang
-#define HW_TIMER_INTERVAL_FREQ 8000L
+#define HW_TIMER_INTERVAL_FREQ 10000L
 
 AVR_Slow_PWM heatingElementPwm;
 
