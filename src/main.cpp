@@ -92,6 +92,8 @@ void setup() {
   // initialize built-in LED pin as an output (will blink on heartbeat)
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(FAN_PIN, OUTPUT);
+  pinMode(TOP_HEATING_ELEMENT_PIN, OUTPUT);
+  pinMode(BOTTOM_HEATING_ELEMENT_PIN, OUTPUT);
 
   // initialize door sensor pin as an input
   pinMode(DOOR_PIN, INPUT_PULLUP);
