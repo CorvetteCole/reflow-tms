@@ -18,7 +18,7 @@ public:
   StaticJsonDocument<96> toJson() const;
 
 private:
-  const char *const stateStrings[4] = {"DEBUG", "INFO", "WARN", "CRITICAL"};
+  const char *const stateStrings[4] = {"IDLE", "HEATING", "COOLING", "FAULT"};
 };
 
 #endif // REFLOW_TMS_STATUS_H
