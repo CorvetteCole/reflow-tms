@@ -151,22 +151,22 @@ void readTemperature() {
     enterErrorState(ERROR_CURRENT_TEMPERATURE_FAULT);
 
     if (fault & MAX31865_FAULT_HIGHTHRESH) {
-      logger.error(F("RTD High Threshold"));
+      logger.debug(F("RTD High Threshold"));
     }
     if (fault & MAX31865_FAULT_LOWTHRESH) {
-      logger.error(F("RTD Low Threshold"));
+      logger.debug(F("RTD Low Threshold"));
     }
     if (fault & MAX31865_FAULT_REFINLOW) {
-      logger.error(F("REFIN- > 0.85 x Bias"));
+      logger.debug(F("REFIN- > 0.85 x Bias"));
     }
     if (fault & MAX31865_FAULT_REFINHIGH) {
-      logger.error(F("REFIN- < 0.85 x Bias - FORCE- open"));
+      logger.debug(F("REFIN- < 0.85 x Bias - FORCE- open"));
     }
     if (fault & MAX31865_FAULT_RTDINLOW) {
-      logger.error(F("RTDIN- < 0.85 x Bias - FORCE- open"));
+      logger.debug(F("RTDIN- < 0.85 x Bias - FORCE- open"));
     }
     if (fault & MAX31865_FAULT_OVUV) {
-      logger.error(F("Under/Over voltage"));
+      logger.debug(F("Under/Over voltage"));
     }
     delay(100);
   }
