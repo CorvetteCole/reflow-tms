@@ -233,7 +233,7 @@ uint32_t lastSentStatus = 0;
 void loop() {
   static StaticJsonDocument<32> commandJson;
 
-  status.isDoorOpen = digitalRead(DOOR_PIN);
+  status.isDoorOpen = !digitalRead(DOOR_PIN);
   if (status.state == State::HEATING && status.isDoorOpen) {
     enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
   }
@@ -257,9 +257,11 @@ void loop() {
       if (commandJson["target"] != nullptr) {
         commandPresent = true;
         float targetTemperature = commandJson["target"];
-        if (targetTemperature < MIN_TARGET_TEMPERATURE) {
+        if (targetTemperature != 0 &&
+            targetTemperature < MIN_TARGET_TEMPERATURE) {
           enterErrorState(ERROR_TARGET_TEMPERATURE_TOO_LOW);
-        } else if (targetTemperature > MAX_TARGET_TEMPERATURE) {
+        } else if (targetTemperature != 0 &&
+                   targetTemperature > MAX_TARGET_TEMPERATURE) {
           enterErrorState(ERROR_TARGET_TEMPERATURE_TOO_HIGH);
         } else {
           status.targetTemperature = targetTemperature;
