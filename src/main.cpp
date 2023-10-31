@@ -55,8 +55,8 @@ void sendStatus() {
 
 void enterErrorState(uint8_t error) {
   if (status.state != State::FAULT) {
-    //    immediateStop();
-    //    status.state = State::FAULT;
+    immediateStop();
+    status.state = State::FAULT;
   }
   if (!(status.error & error)) {
     // this is a new error!
