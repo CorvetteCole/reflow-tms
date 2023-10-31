@@ -2,12 +2,12 @@
 
 StaticJsonDocument<96> Status::toJson() const {
   StaticJsonDocument<96> statusJson;
-  statusJson["targetTemperature"] = targetTemperature;
-  statusJson["currentTemperature"] = currentTemperature;
-  statusJson["topHeatDutyCycle"] = topHeatDutyCycle;
-  statusJson["bottomHeatDutyCycle"] = bottomHeatDutyCycle;
-  statusJson["isDoorOpen"] = isDoorOpen;
-  statusJson["error"] = error;
-  statusJson["state"] = stateStrings[state];
+  statusJson[F("target")] = targetTemperature;
+  statusJson[F("current")] = currentTemperature;
+  statusJson[F("top")] = topHeatDutyCycle;
+  statusJson[F("bottom")] = bottomHeatDutyCycle;
+  statusJson[F("door_open")] = isDoorOpen;
+  statusJson[F("error")] = error;
+  statusJson[F("state")] = stateStrings[state];
   return statusJson;
 }

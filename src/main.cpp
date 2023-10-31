@@ -31,7 +31,7 @@ QuickPID bottomHeatingElementPid(&pidCurrentTemperature,
 
 Adafruit_MAX31865 max31865 = Adafruit_MAX31865(CS_PIN, DI_PIN, DO_PIN, CLK_PIN);
 
-Logger logger = Logger(LogLevel::DEBUG);
+Logger logger = Logger(LogLevel::INFO);
 
 void pwmTimerHandler() { heatingElementPwm.run(); }
 
@@ -69,7 +69,7 @@ void enterErrorState(uint8_t error) {
 void (*resetFunc)() = nullptr;
 
 void setup() {
-  Serial.begin(230400);
+  Serial.begin(115200);
   while (!Serial && !Serial.available()) {
   }
 
@@ -145,9 +145,7 @@ void readTemperature() {
     float ratio = rtd;
     ratio /= 32768;
 
-    logger.debug((String("RTD value: ") + String(rtd, 8)).c_str());
     logger.debug((String("Resistance: ") + String(RREF * ratio, 8)).c_str());
-    logger.debug((String("Temperature: ") + String(temperature, 8)).c_str());
   }
 
   uint8_t fault = max31865.readFault();
@@ -258,9 +256,9 @@ void loop() {
     } else {
       bool commandPresent = false;
 
-      if (commandJson.containsKey("targetTemperature")) {
+      if (commandJson["target"] != nullptr) {
         commandPresent = true;
-        int targetTemperature = commandJson["targetTemperature"];
+        float targetTemperature = commandJson["target"];
         if (targetTemperature < 0 ||
             targetTemperature > MAX_TARGET_TEMPERATURE) {
           logger.warn(F("Invalid target temperature"));
@@ -269,9 +267,9 @@ void loop() {
         }
       }
 
-      if (commandJson.containsKey("logLevel")) {
+      if (commandJson["target"] != nullptr) {
         commandPresent = true;
-        const char *logLevel = commandJson["logLevel"];
+        const char *logLevel = commandJson["log"];
         if (strcasecmp(logLevel, "DEBUG") == 0) {
           logger.logLevel = LogLevel::DEBUG;
         } else if (strcasecmp(logLevel, "INFO") == 0) {
