@@ -34,7 +34,7 @@ Status status;
 float pidCurrentTemperature, pidTargetTemperature = 130, pidHeatDutyCycle = 0,
                              Kp, Ki, Kd;
 
-sTune tuner = sTune(&pidCurrentTemperature, &pidHeatDutyCycle, sTune::ZN_PID,
+sTune tuner = sTune(&pidCurrentTemperature, &pidHeatDutyCycle, sTune::Mixed_PID,
                     sTune::directIP, sTune::printALL);
 QuickPID heatingElementPid(&pidCurrentTemperature, &pidHeatDutyCycle,
                            &pidTargetTemperature);
@@ -213,9 +213,9 @@ void loop() {
   }
 
   status.isDoorOpen = !digitalRead(DOOR_PIN);
-  if (status.state == State::HEATING && status.isDoorOpen) {
-    enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
-  }
+//  if (status.state == State::HEATING && status.isDoorOpen) {
+//    enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
+//  }
 
   switch (tuner.Run()) {
   case sTune::sample:
@@ -227,19 +227,19 @@ void loop() {
     break;
   case sTune::tunings:
     tuner.GetAutoTunings(&Kp, &Ki, &Kd); // sketch variables updated by sTune
-    heatingElementPid.SetOutputLimits(0, outputSpan * 0.1);
+    //    heatingElementPid.SetOutputLimits(0, outputSpan * 0.1);
     //    heatingElementPid.SetSampleTimeUs(100000);
     pidHeatDutyCycle = outputStep;
     heatingElementPid.SetMode(
         QuickPID::Control::automatic); // the PID is turned on
-    heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnMeas);
-    //    heatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
+    heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
+    heatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwCondition);
     heatingElementPid.SetTunings(Kp, Ki, Kd); // update PID with the new tunings
     break;
 
   case sTune::runPid:
     if (startup &&
-        pidCurrentTemperature > pidTargetTemperature - 5) { // reduce overshoot
+        pidCurrentTemperature > pidTargetTemperature - 10) { // reduce overshoot
       startup = false;
       pidHeatDutyCycle -= 9;
       heatingElementPid.SetMode(QuickPID::Control::manual);
