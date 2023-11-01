@@ -20,12 +20,11 @@
 uint32_t settleTimeSec = 10;
 uint32_t testTimeSec = 500; // runPid interval = testTimeSec / samples
 const uint16_t samples = 500;
-const float inputSpan = 200;
-const float outputSpan = 1000;
+const float inputSpan = 350;
+const float outputSpan = 100;
 float outputStart = 0;
-float outputStep = 50;
+float outputStep = 100;
 float tempLimit = 300;
-uint8_t debounce = 1;
 bool startup = true;
 
 AVR_Slow_PWM heatingElementPwm;
@@ -36,7 +35,7 @@ float pidCurrentTemperature, pidTargetTemperature = 130, pidHeatDutyCycle = 0,
                              Kp, Ki, Kd;
 
 sTune tuner = sTune(&pidCurrentTemperature, &pidHeatDutyCycle, sTune::ZN_PID,
-                    sTune::directIP, sTune::printOFF);
+                    sTune::directIP, sTune::printALL);
 QuickPID heatingElementPid(&pidCurrentTemperature, &pidHeatDutyCycle,
                            &pidTargetTemperature);
 
@@ -134,8 +133,13 @@ void setup() {
 
   logger.info(F("Thermal management system started"));
 
-  tuner.Configure(inputSpan, outputSpan, outputStart, outputStep, testTimeSec, settleTimeSec, samples);
+  heatingElementPid.SetOutputLimits(0, 100);
+
+  tuner.Configure(inputSpan, outputSpan, outputStart, outputStep, testTimeSec,
+                  settleTimeSec, samples);
   tuner.SetEmergencyStop(tempLimit);
+
+  status.targetTemperature = pidTargetTemperature;
 
   delay(3000);
 }
@@ -191,8 +195,18 @@ void readTemperature() {
 }
 
 uint8_t lastHeatDutyCycle = 0;
+uint32_t lastSentStatus = 0;
 
 void loop() {
+  // send status
+  if (millis() - lastSentStatus > STATUS_SEND_INTERVAL) {
+//    readTemperature();
+    sendStatus();
+    lastSentStatus = millis();
+  }
+
+//    return;
+
   if (status.state == State::FAULT) {
     // if we're in a fault state, don't do anything
     return;
@@ -207,19 +221,19 @@ void loop() {
   case sTune::sample:
     readTemperature();
     pidCurrentTemperature = status.currentTemperature;
-    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle, pidTargetTemperature,
-                  0.5f, 3);
+    //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
+    //    pidTargetTemperature,
+    //                  0.5f, 3);
     break;
   case sTune::tunings:
     tuner.GetAutoTunings(&Kp, &Ki, &Kd); // sketch variables updated by sTune
     heatingElementPid.SetOutputLimits(0, outputSpan * 0.1);
-    heatingElementPid.SetSampleTimeUs((outputSpan - 1) * 1000);
-    debounce = 0; // ssr mode
+    //    heatingElementPid.SetSampleTimeUs(100000);
     pidHeatDutyCycle = outputStep;
     heatingElementPid.SetMode(
         QuickPID::Control::automatic); // the PID is turned on
     heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnMeas);
-    heatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
+    //    heatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
     heatingElementPid.SetTunings(Kp, Ki, Kd); // update PID with the new tunings
     break;
 
@@ -234,10 +248,13 @@ void loop() {
     readTemperature();
     pidCurrentTemperature = status.currentTemperature;
     heatingElementPid.Compute();
-    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle, pidTargetTemperature,
-                  0.5f, 3);
+    //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
+    //    pidTargetTemperature,
+    //                  0.5f, 3);
     break;
   }
+
+  status.heatDutyCycle = static_cast<uint8_t>(pidHeatDutyCycle);
 
   if (status.heatDutyCycle != lastHeatDutyCycle) {
     //    logger.debug(F("Updating PWM"));
@@ -252,10 +269,4 @@ void loop() {
         2, LED_BUILTIN, HEATING_ELEMENT_PWM_FREQUENCY, status.heatDutyCycle);
     lastHeatDutyCycle = status.heatDutyCycle;
   }
-
-  // send status
-//  if (millis() - lastSentStatus > STATUS_SEND_INTERVAL) {
-//    sendStatus();
-//    lastSentStatus = millis();
-//  }
 }
