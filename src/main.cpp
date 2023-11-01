@@ -367,7 +367,8 @@ void loop() {
     }
   } else {
     if (status.state != State::COOLING &&
-        status.currentTemperature > status.targetTemperature) {
+        status.currentTemperature > status.targetTemperature &&
+        status.currentTemperature - status.targetTemperature > 10) {
       logger.info(F("Started cooling"));
       status.state = State::COOLING;
     } else if (status.state != State::HEATING &&
