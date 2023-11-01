@@ -190,14 +190,13 @@ void setup() {
   logger.info(F("Thermal management system started"));
 
   logger.warn("starting in 3 seconds...");
-  readTemperature();
   status.targetTemperature =
       targetTemperatureCurvePoints[targetTemperatureCurveIndex];
   delay(3000);
 }
 
 void loop() {
-
+  readTemperature();
   // send status
   if (millis() - lastSentPidTunerStatus > PID_TUNER_SEND_INTERVAL) {
     // record current temperature to buffer
@@ -206,8 +205,6 @@ void loop() {
     }
     previousTemperaturePoints[stabilizationWindow - 1] =
         status.currentTemperature;
-
-    readTemperature();
 
     // send time, current duty cycle, and current temperature
     // time should be in seconds with decimal
