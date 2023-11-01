@@ -1,7 +1,5 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <QuickPID.h>
-#include <sTune.h>
 
 #define USE_TIMER_1 true
 #define USING_MICROS_RESOLUTION true
@@ -231,48 +229,44 @@ void loop() {
     enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
   }
 
-  // calculate whether the temperature is stable
-  bool isTemperatureStable = true;
-  for (int i = 0; i < stabilizationWindow - 1; i++) {
-    if (abs(previousTemperaturePoints[i] - previousTemperaturePoints[i + 1]) >
-        stabilizedThreshold) {
-      isTemperatureStable = false;
-      break;
-    }
-  }
-
-  if (status.state == State::IDLE && isTemperatureStable &&
-      abs(status.currentTemperature - status.targetTemperature) <=
-          targetTemperatureAchievedThreshold) {
-    // we are waiting, the temperature is stable, and we have achieved the
-    // current target, so we can move onto the next point
-    targetTemperatureCurveIndex++;
-    if (targetTemperatureCurveIndex < numTargetTemperatureCurvePoints) {
-      status.targetTemperature =
-          targetTemperatureCurvePoints[targetTemperatureCurveIndex];
-
-      // determine whether we are heating or cooling
-      if (status.targetTemperature > status.currentTemperature) {
-        status.state = State::HEATING;
+  if (targetTemperatureCurveIndex < numTargetTemperatureCurvePoints) {
+    if (status.state == State::IDLE) {
+      // calculate whether the temperature is stable
+      bool isTemperatureStable = true;
+      for (int i = 0; i < stabilizationWindow - 1; i++) {
+        if (abs(previousTemperaturePoints[i] -
+                previousTemperaturePoints[i + 1]) > stabilizedThreshold) {
+          isTemperatureStable = false;
+          break;
+        }
       }
 
-    } else {
-      // we have reached the end of the curve, so we are done
-      status.state = State::IDLE;
-      status.heatDutyCycle = 0;
-      immediateStop();
-    }
-  }
+      bool isWithinThreshold =
+          abs(status.currentTemperature - status.targetTemperature) <=
+          targetTemperatureAchievedThreshold;
 
-  if (status.state == State::HEATING) {
-    if (status.currentTemperature < status.targetTemperature) {
-      status.heatDutyCycle = 100;
-    } else {
-      status.state = State::IDLE;
-      status.heatDutyCycle = 0;
-    }
-  }
+      if (isTemperatureStable && isWithinThreshold) {
+        targetTemperatureCurveIndex++;
+        status.targetTemperature =
+            targetTemperatureCurvePoints[targetTemperatureCurveIndex];
 
+        // determine if we should be heating
+        if (status.targetTemperature > status.currentTemperature) {
+          status.state = State::HEATING;
+        }
+      }
+    } else if (status.state == State::HEATING) {
+      if (status.currentTemperature < status.targetTemperature) {
+        status.heatDutyCycle = 100;
+      } else {
+        status.state = State::IDLE;
+        status.heatDutyCycle = 0;
+      }
+    }
+  } else {
+    status.state = State::IDLE;
+    status.heatDutyCycle = 0;
+  }
 
   if (status.heatDutyCycle != lastHeatDutyCycle) {
     // set PWM
