@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <QuickPID.h>
+#include <sTune.h>
 #define USE_TIMER_1 true
 #define USING_MICROS_RESOLUTION true
 
@@ -15,23 +16,33 @@
 // Don't change these numbers to make higher Timer freq. System can hang
 #define HW_TIMER_INTERVAL_FREQ 10000L
 
+// user settings
+uint32_t settleTimeSec = 10;
+uint32_t testTimeSec = 500; // runPid interval = testTimeSec / samples
+const uint16_t samples = 500;
+const float inputSpan = 200;
+const float outputSpan = 1000;
+float outputStart = 0;
+float outputStep = 50;
+float tempLimit = 300;
+uint8_t debounce = 1;
+bool startup = true;
+
 AVR_Slow_PWM heatingElementPwm;
 
 Status status;
 
-float pidCurrentTemperature, pidTargetTemperature, pidTopHeatDutyCycle,
-    pidBottomHeatDutyCycle;
+float pidCurrentTemperature, pidTargetTemperature = 130, pidHeatDutyCycle = 0,
+                             Kp, Ki, Kd;
 
-QuickPID topHeatingElementPid(&pidCurrentTemperature, &pidTopHeatDutyCycle,
-                              &pidTargetTemperature);
-
-QuickPID bottomHeatingElementPid(&pidCurrentTemperature,
-                                 &pidBottomHeatDutyCycle,
-                                 &pidTargetTemperature);
+sTune tuner = sTune(&pidCurrentTemperature, &pidHeatDutyCycle, sTune::ZN_PID,
+                    sTune::directIP, sTune::printOFF);
+QuickPID heatingElementPid(&pidCurrentTemperature, &pidHeatDutyCycle,
+                           &pidTargetTemperature);
 
 Adafruit_MAX31865 max31865 = Adafruit_MAX31865(CS_PIN, DI_PIN, DO_PIN, CLK_PIN);
 
-Logger logger = Logger(LogLevel::INFO);
+Logger logger = Logger(LogLevel::CRITICAL);
 
 void pwmTimerHandler() { heatingElementPwm.run(); }
 
@@ -44,8 +55,7 @@ void immediateStop() {
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
   //  heatingElementPwm.disableAll();
 
-  status.topHeatDutyCycle = 0;
-  status.bottomHeatDutyCycle = 0;
+  status.heatDutyCycle = 0;
 }
 
 void sendStatus() {
@@ -66,12 +76,8 @@ void enterErrorState(uint8_t error) {
   }
 }
 
-void (*resetFunc)() = nullptr;
-
 void setup() {
   Serial.begin(115200);
-  while (!Serial && !Serial.available()) {
-  }
 
   logger.info(F("Starting thermal management system..."));
   //  logger.info(BOARD_NAME);
@@ -117,20 +123,21 @@ void setup() {
 
   logger.debug(F("Initializing PID..."));
 
-  topHeatingElementPid.SetOutputLimits(0, 100);
-  topHeatingElementPid.SetTunings(
-      TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI, TOP_HEATING_ELEMENT_KD);
-
-  bottomHeatingElementPid.SetOutputLimits(0, 100);
-  bottomHeatingElementPid.SetTunings(BOTTOM_HEATING_ELEMENT_KP,
-                                     BOTTOM_HEATING_ELEMENT_KI,
-                                     BOTTOM_HEATING_ELEMENT_KD);
+  //  heatingElementPid.SetOutputLimits(0, 100);
+  //  heatingElementPid.SetTunings(TOP_HEATING_ELEMENT_KP,
+  //  TOP_HEATING_ELEMENT_KI,
+  //                               TOP_HEATING_ELEMENT_KD);
 
   logger.debug(F("Initializing MAX31865_3WIRE..."));
 
   max31865.begin(MAX31865_3WIRE);
 
   logger.info(F("Thermal management system started"));
+
+  tuner.Configure(inputSpan, outputSpan, outputStart, outputStep, testTimeSec, settleTimeSec, samples);
+  tuner.SetEmergencyStop(tempLimit);
+
+  delay(3000);
 }
 
 /// Reads the temperature sensor, updating the status struct accordingly.
@@ -183,228 +190,72 @@ void readTemperature() {
   }
 }
 
-char receivedChars[INPUT_BUFFER_SIZE];
-bool newData = false;
-
-bool receiveCommand() {
-  static bool receiveInProgress = false;
-
-  static byte ndx = 0;
-  char startMarker = '{';
-  char endMarker = '}';
-  char rc;
-
-  while (Serial.available() > 0 && !newData) {
-    rc = Serial.read();
-
-    if (receiveInProgress) {
-      if (rc != endMarker) {
-        receivedChars[ndx] = rc;
-        ndx++;
-        if (ndx >= INPUT_BUFFER_SIZE) {
-          ndx = INPUT_BUFFER_SIZE - 1;
-        }
-      } else {
-        receivedChars[ndx] = endMarker;
-        ndx++;
-        receivedChars[ndx] = '\0'; // terminate the string
-        receiveInProgress = false;
-        ndx = 0;
-        return true;
-      }
-    } else if (rc == startMarker) {
-      receivedChars[ndx] = startMarker;
-      ndx++;
-      receiveInProgress = true;
-    }
-  }
-  return false;
-}
-
-uint8_t lastTopHeatDutyCycle = 0;
-uint8_t lastBottomHeatDutyCycle = 0;
-uint32_t lastUiHeartbeat = 0;
-uint32_t lastSentStatus = 0;
-
-// TODO:
-// - figure out why erroring doesn't actually set the output to off every time
-// (!!)
-// - figure out the funkiness with the pid loop integral which seems to get
-// weird if you go between idle and heating states many times
+uint8_t lastHeatDutyCycle = 0;
 
 void loop() {
-  static StaticJsonDocument<32> commandJson;
+  if (status.state == State::FAULT) {
+    // if we're in a fault state, don't do anything
+    return;
+  }
 
   status.isDoorOpen = !digitalRead(DOOR_PIN);
   if (status.state == State::HEATING && status.isDoorOpen) {
     enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
   }
-  //  logger.debug(F("Reading temperature"));
-  readTemperature();
 
-  //  logger.debug(F("Reading command"));
-  if (receiveCommand()) {
-    lastUiHeartbeat = millis();
-
-    // Deserialize the JSON document
-    DeserializationError error = deserializeJson(commandJson, receivedChars);
-
-    // Test if parsing succeeds.
-    if (error) {
-      logger.warn(F("Could not parse command"));
-      logger.warn(error.c_str());
-    } else {
-      bool commandPresent = false;
-
-      if (commandJson["target"] != nullptr) {
-        commandPresent = true;
-        float targetTemperature = commandJson["target"];
-        if (targetTemperature != 0 &&
-            targetTemperature < MIN_TARGET_TEMPERATURE) {
-          enterErrorState(ERROR_TARGET_TEMPERATURE_TOO_LOW);
-        } else if (targetTemperature != 0 &&
-                   targetTemperature > MAX_TARGET_TEMPERATURE) {
-          enterErrorState(ERROR_TARGET_TEMPERATURE_TOO_HIGH);
-        } else {
-          status.targetTemperature = targetTemperature;
-        }
-      }
-
-      if (commandJson["log"] != nullptr) {
-        commandPresent = true;
-        const char *logLevel = commandJson["log"];
-        if (strcasecmp(logLevel, "DEBUG") == 0) {
-          logger.logLevel = LogLevel::DEBUG;
-        } else if (strcasecmp(logLevel, "INFO") == 0) {
-          logger.logLevel = LogLevel::INFO;
-        } else if (strcasecmp(logLevel, "WARN") == 0) {
-          logger.logLevel = LogLevel::WARN;
-        } else if (strcasecmp(logLevel, "CRITICAL") == 0) {
-          logger.logLevel = LogLevel::CRITICAL;
-        } else {
-          logger.warn(F("Invalid log level"));
-        }
-      }
-
-      if (commandJson["reset"] != nullptr) {
-        logger.warn(F("Resetting..."));
-        resetFunc();
-      }
-
-      if (commandJson["pid_tune"] != nullptr) {
-        float kp = commandJson["kp"];
-        float ki = commandJson["ki"];
-        float kd = commandJson["kd"];
-        if (commandJson["pid"] == "top") {
-          topHeatingElementPid.SetTunings(kp, ki, kd);
-        } else if (commandJson["pid"] == "bottom") {
-          bottomHeatingElementPid.SetTunings(kp, ki, kd);
-        } else if (commandJson["pid"] == "both") {
-          topHeatingElementPid.SetTunings(kp, ki, kd);
-          bottomHeatingElementPid.SetTunings(kp, ki, kd);
-        } else {
-          logger.warn(F("Invalid PID command"));
-        }
-      }
-
-      if (commandJson["pid_reset"] != nullptr) {
-        if (commandJson["reset_pid"] == "top") {
-          topHeatingElementPid.Reset();
-        } else if (commandJson["reset_pid"] == "bottom") {
-          bottomHeatingElementPid.Reset();
-        } else if (commandJson["reset_pid"] == "both") {
-          topHeatingElementPid.Reset();
-          bottomHeatingElementPid.Reset();
-        } else {
-          logger.warn(F("Invalid PID reset command"));
-        }
-      }
-
-      if (!commandPresent) {
-        logger.warn(F("No command present, received: "));
-        serializeJson(commandJson, Serial);
-        Serial.println();
-      }
-
-      newData = false;
-    }
-  } else if (lastUiHeartbeat != 0 && millis() - lastUiHeartbeat > UI_TIMEOUT) {
-    enterErrorState(ERROR_UI_TIMEOUT);
-  }
-
-  // send status
-  if (millis() - lastSentStatus > STATUS_SEND_INTERVAL) {
-    sendStatus();
-    lastSentStatus = millis();
-  }
-
-  if (status.state == State::FAULT) {
-    //    logger.debug(F("In error state, not controlling heating elements"));
-    // make sure HEATING elements are off
-    if (status.topHeatDutyCycle != 0 || status.bottomHeatDutyCycle != 0) {
-      logger.warn("Heating elements should be off already! Turning off now...");
-      immediateStop();
-      delay(500);
-    }
-    return;
-  }
-
-  if (status.targetTemperature == 0) {
-    if (status.state != State::IDLE) {
-      logger.debug(
-          F("Target temperature is 0, resetting PID loop and disabling "
-            "heating elements"));
-      status.state = State::IDLE;
-      topHeatingElementPid.SetMode(QuickPID::Control::manual);
-      topHeatingElementPid.Reset();
-      bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
-      bottomHeatingElementPid.Reset();
-      status.topHeatDutyCycle = 0;
-      status.bottomHeatDutyCycle = 0;
-      digitalWrite(FAN_PIN, LOW);
-      //    heatingElementPwm.disableAll(); // disable timers while we aren't
-      //    using them
-    }
-  } else {
-    if (status.state != State::COOLING &&
-        status.currentTemperature > status.targetTemperature) {
-      logger.info(F("Started cooling"));
-      status.state = State::COOLING;
-    } else if (status.state != State::HEATING &&
-               status.targetTemperature > status.currentTemperature) {
-      logger.info(F("Started heating"));
-      status.state = State::HEATING;
-      digitalWrite(FAN_PIN, HIGH);
-      topHeatingElementPid.SetMode(QuickPID::Control::automatic);
-      bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);
-    }
-
-    //    logger.debug(F("Calculating duty cycles"));
-    //    heatingElementPwm.enableAll();
-    pidTargetTemperature = status.targetTemperature;
+  switch (tuner.Run()) {
+  case sTune::sample:
+    readTemperature();
     pidCurrentTemperature = status.currentTemperature;
-    topHeatingElementPid.Compute();
-    bottomHeatingElementPid.Compute();
-    // we can statically cast to uint8_t because the output limits are set to
-    // 0-100
-    status.topHeatDutyCycle = static_cast<uint8_t>(pidTopHeatDutyCycle);
-    status.bottomHeatDutyCycle = static_cast<uint8_t>(pidBottomHeatDutyCycle);
+    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle, pidTargetTemperature,
+                  0.5f, 3);
+    break;
+  case sTune::tunings:
+    tuner.GetAutoTunings(&Kp, &Ki, &Kd); // sketch variables updated by sTune
+    heatingElementPid.SetOutputLimits(0, outputSpan * 0.1);
+    heatingElementPid.SetSampleTimeUs((outputSpan - 1) * 1000);
+    debounce = 0; // ssr mode
+    pidHeatDutyCycle = outputStep;
+    heatingElementPid.SetMode(
+        QuickPID::Control::automatic); // the PID is turned on
+    heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnMeas);
+    heatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
+    heatingElementPid.SetTunings(Kp, Ki, Kd); // update PID with the new tunings
+    break;
+
+  case sTune::runPid:
+    if (startup &&
+        pidCurrentTemperature > pidTargetTemperature - 5) { // reduce overshoot
+      startup = false;
+      pidHeatDutyCycle -= 9;
+      heatingElementPid.SetMode(QuickPID::Control::manual);
+      heatingElementPid.SetMode(QuickPID::Control::automatic);
+    }
+    readTemperature();
+    pidCurrentTemperature = status.currentTemperature;
+    heatingElementPid.Compute();
+    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle, pidTargetTemperature,
+                  0.5f, 3);
+    break;
   }
 
-  if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
-      status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {
+  if (status.heatDutyCycle != lastHeatDutyCycle) {
     //    logger.debug(F("Updating PWM"));
     // set PWM
     heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
                                        HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.topHeatDutyCycle);
+                                       status.heatDutyCycle);
     heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
                                        HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.bottomHeatDutyCycle);
-    heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
-                                       HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.bottomHeatDutyCycle);
-    lastTopHeatDutyCycle = status.topHeatDutyCycle;
-    lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
+                                       status.heatDutyCycle);
+    heatingElementPwm.modifyPWMChannel(
+        2, LED_BUILTIN, HEATING_ELEMENT_PWM_FREQUENCY, status.heatDutyCycle);
+    lastHeatDutyCycle = status.heatDutyCycle;
   }
+
+  // send status
+//  if (millis() - lastSentStatus > STATUS_SEND_INTERVAL) {
+//    sendStatus();
+//    lastSentStatus = millis();
+//  }
 }

@@ -9,8 +9,7 @@ class Status {
 public:
   float targetTemperature{}; // in degrees Celsius
   float currentTemperature{};
-  uint8_t topHeatDutyCycle{};
-  uint8_t bottomHeatDutyCycle{};
+  uint8_t heatDutyCycle{};
   bool isDoorOpen = false;
   State state = State::IDLE;
   uint8_t error = 0;
