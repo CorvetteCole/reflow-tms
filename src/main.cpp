@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <QuickPID.h>
-#include <sTune.h>
+#include <PIDAutotuner.h>
 #define USE_TIMER_1 true
 #define USING_MICROS_RESOLUTION true
 
@@ -16,32 +15,13 @@
 // Don't change these numbers to make higher Timer freq. System can hang
 #define HW_TIMER_INTERVAL_FREQ 10000L
 
-// user settings
-uint32_t settleTimeSec = 10;
-uint32_t testTimeSec = 500; // runPid interval = testTimeSec / samples
-const uint16_t samples = 500;
-const float inputSpan = 350;
-const float outputSpan = 100;
-float outputStart = 0;
-float outputStep = 5;
-float tempLimit = 300;
-bool startup = true;
-
 AVR_Slow_PWM heatingElementPwm;
 
 Status status;
 
-float pidCurrentTemperature, pidTargetTemperature = 130, pidHeatDutyCycle = 0,
-                             Kp, Ki, Kd;
-
-sTune tuner = sTune(&pidCurrentTemperature, &pidHeatDutyCycle, sTune::Mixed_PID,
-                    sTune::direct5T, sTune::printOFF);
-QuickPID heatingElementPid(&pidCurrentTemperature, &pidHeatDutyCycle,
-                           &pidTargetTemperature);
-
 Adafruit_MAX31865 max31865 = Adafruit_MAX31865(CS_PIN, DI_PIN, DO_PIN, CLK_PIN);
 
-Logger logger = Logger(LogLevel::CRITICAL);
+Logger logger = Logger(LogLevel::INFO);
 
 void pwmTimerHandler() { heatingElementPwm.run(); }
 
@@ -73,75 +53,6 @@ void enterErrorState(uint8_t error) {
     logger.error(ovenErrorToString(error));
     sendStatus(); // immediately update status
   }
-}
-
-void setup() {
-  Serial.begin(115200);
-
-  logger.info(F("Starting thermal management system..."));
-  //  logger.info(BOARD_NAME);
-
-  logger.debug(F("Initializing ITimer1..."));
-
-  ITimer1.init();
-
-  logger.debug(F("Attaching ITimer1 interrupt..."));
-
-  if (ITimer1.attachInterrupt(HW_TIMER_INTERVAL_FREQ, pwmTimerHandler)) {
-    logger.debug(F("Starting ITimer1 OK"));
-  } else {
-    logger.error(
-        F("Can't set ITimer1 correctly. Select another freq. or timer"));
-  }
-
-  // initialize built-in LED pin as an output (will blink on heartbeat)
-  pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(FAN_PIN, OUTPUT);
-  pinMode(TOP_HEATING_ELEMENT_PIN, OUTPUT);
-  pinMode(BOTTOM_HEATING_ELEMENT_PIN, OUTPUT);
-
-  // initialize door sensor pin as an input
-  pinMode(DOOR_PIN, INPUT_PULLUP);
-  pinMode(RESET_PIN, INPUT_PULLUP);
-
-  logger.debug(F("Attaching interrupts..."));
-
-  //  attachInterrupt(digitalPinToInterrupt(RESET_PIN), resetFunc, FALLING);
-
-  logger.debug(F("Initializing PWM..."));
-
-  // initialize both HEATING element PWM interfaces, set duty cycle to 0
-  heatingElementPwm.setPWM(TOP_HEATING_ELEMENT_PIN,
-                           HEATING_ELEMENT_PWM_FREQUENCY, 0);
-  heatingElementPwm.setPWM(BOTTOM_HEATING_ELEMENT_PIN,
-                           HEATING_ELEMENT_PWM_FREQUENCY, 0);
-  heatingElementPwm.setPWM(LED_BUILTIN, HEATING_ELEMENT_PWM_FREQUENCY, 0);
-
-  //  heatingElementPwm.disableAll(); // disable timers while we aren't using
-  //  them
-
-  logger.debug(F("Initializing PID..."));
-
-  //  heatingElementPid.SetOutputLimits(0, 100);
-  //  heatingElementPid.SetTunings(TOP_HEATING_ELEMENT_KP,
-  //  TOP_HEATING_ELEMENT_KI,
-  //                               TOP_HEATING_ELEMENT_KD);
-
-  logger.debug(F("Initializing MAX31865_3WIRE..."));
-
-  max31865.begin(MAX31865_3WIRE);
-
-  logger.info(F("Thermal management system started"));
-
-  heatingElementPid.SetOutputLimits(0, 100);
-
-  tuner.Configure(inputSpan, outputSpan, outputStart, outputStep, testTimeSec,
-                  settleTimeSec, samples);
-  tuner.SetEmergencyStop(tempLimit);
-
-  status.targetTemperature = pidTargetTemperature;
-
-  delay(3000);
 }
 
 /// Reads the temperature sensor, updating the status struct accordingly.
@@ -194,81 +105,136 @@ void readTemperature() {
   }
 }
 
+void setup() {
+  Serial.begin(115200);
+
+  logger.info(F("Starting thermal management system..."));
+  //  logger.info(BOARD_NAME);
+
+  logger.debug(F("Initializing ITimer1..."));
+
+  ITimer1.init();
+
+  logger.debug(F("Attaching ITimer1 interrupt..."));
+
+  if (ITimer1.attachInterrupt(HW_TIMER_INTERVAL_FREQ, pwmTimerHandler)) {
+    logger.debug(F("Starting ITimer1 OK"));
+  } else {
+    logger.error(
+        F("Can't set ITimer1 correctly. Select another freq. or timer"));
+  }
+
+  // initialize built-in LED pin as an output (will blink on heartbeat)
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(FAN_PIN, OUTPUT);
+  pinMode(TOP_HEATING_ELEMENT_PIN, OUTPUT);
+  pinMode(BOTTOM_HEATING_ELEMENT_PIN, OUTPUT);
+
+  // initialize door sensor pin as an input
+  pinMode(DOOR_PIN, INPUT_PULLUP);
+  pinMode(RESET_PIN, INPUT_PULLUP);
+
+  logger.debug(F("Attaching interrupts..."));
+
+  //  attachInterrupt(digitalPinToInterrupt(RESET_PIN), resetFunc, FALLING);
+
+  logger.debug(F("Initializing PWM..."));
+
+  // initialize both HEATING element PWM interfaces, set duty cycle to 0
+  heatingElementPwm.setPWM(TOP_HEATING_ELEMENT_PIN,
+                           HEATING_ELEMENT_PWM_FREQUENCY, 0);
+  heatingElementPwm.setPWM(BOTTOM_HEATING_ELEMENT_PIN,
+                           HEATING_ELEMENT_PWM_FREQUENCY, 0);
+  heatingElementPwm.setPWM(LED_BUILTIN, HEATING_ELEMENT_PWM_FREQUENCY, 0);
+
+  logger.debug(F("Initializing MAX31865_3WIRE..."));
+
+  max31865.begin(MAX31865_3WIRE);
+
+  logger.info(F("Starting autotune..."));
+
+  delay(3000);
+}
+
 uint8_t lastHeatDutyCycle = 0;
 uint32_t lastSentStatus = 0;
+bool tuned = false;
 
 void loop() {
+  readTemperature();
+
   // send status
   if (millis() - lastSentStatus > STATUS_SEND_INTERVAL) {
-//    readTemperature();
     sendStatus();
     lastSentStatus = millis();
   }
 
-//    return;
-
-  if (status.state == State::FAULT) {
-    // if we're in a fault state, don't do anything
+  if (tuned) {
     return;
   }
 
-  status.isDoorOpen = !digitalRead(DOOR_PIN);
-//  if (status.state == State::HEATING && status.isDoorOpen) {
-//    enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
-//  }
+  long intervalMicroseconds = 100000;
 
-  switch (tuner.Run()) {
-  case sTune::sample:
+  PIDAutotuner tuner = PIDAutotuner();
+
+  tuner.setTargetInputValue(130);
+
+  tuner.setLoopInterval(intervalMicroseconds);
+
+  tuner.setOutputRange(0, 100);
+
+  tuner.setZNMode(PIDAutotuner::znModeNoOvershoot);
+
+  tuner.startTuningLoop();
+
+  long microseconds;
+  while (!tuner.isFinished()) {
+    microseconds = micros();
+
     readTemperature();
-    pidCurrentTemperature = status.currentTemperature;
-    //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
-    //    pidTargetTemperature,
-    //                  0.5f, 3);
-    tuner.printPidTuner(1);
-    break;
-  case sTune::tunings:
-    tuner.GetAutoTunings(&Kp, &Ki, &Kd); // sketch variables updated by sTune
-    //    heatingElementPid.SetOutputLimits(0, outputSpan * 0.1);
-    //    heatingElementPid.SetSampleTimeUs(100000);
-    pidHeatDutyCycle = outputStep;
-    heatingElementPid.SetMode(
-        QuickPID::Control::automatic); // the PID is turned on
-    heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
-    heatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwCondition);
-    heatingElementPid.SetTunings(Kp, Ki, Kd); // update PID with the new tunings
-    break;
 
-  case sTune::runPid:
-    if (startup &&
-        pidCurrentTemperature > pidTargetTemperature - 10) { // reduce overshoot
-      startup = false;
-      pidHeatDutyCycle -= 9;
-      heatingElementPid.SetMode(QuickPID::Control::manual);
-      heatingElementPid.SetMode(QuickPID::Control::automatic);
+    status.heatDutyCycle =
+        static_cast<uint8_t>(tuner.tunePID(status.currentTemperature));
+
+    if (status.state == State::FAULT) {
+      // if we're in a fault state, don't do anything
+      return;
     }
-    readTemperature();
-    pidCurrentTemperature = status.currentTemperature;
-    heatingElementPid.Compute();
-    //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
-    //    pidTargetTemperature,
-    //                  0.5f, 3);
-    tuner.printPidTuner(1);
-    break;
+
+    status.isDoorOpen = !digitalRead(DOOR_PIN);
+    if (status.state == State::HEATING && status.isDoorOpen) {
+      enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
+    }
+
+    if (status.heatDutyCycle != lastHeatDutyCycle) {
+      //    logger.debug(F("Updating PWM"));
+      // set PWM
+      heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
+                                         HEATING_ELEMENT_PWM_FREQUENCY,
+                                         status.heatDutyCycle);
+      heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
+                                         HEATING_ELEMENT_PWM_FREQUENCY,
+                                         status.heatDutyCycle);
+      heatingElementPwm.modifyPWMChannel(
+          2, LED_BUILTIN, HEATING_ELEMENT_PWM_FREQUENCY, status.heatDutyCycle);
+      lastHeatDutyCycle = status.heatDutyCycle;
+    }
+
+    // send status
+    if (millis() - lastSentStatus > STATUS_SEND_INTERVAL) {
+      sendStatus();
+      lastSentStatus = millis();
+    }
+
+    while (micros() - microseconds < intervalMicroseconds) {
+      delayMicroseconds(1);
+    }
   }
 
-  status.heatDutyCycle = static_cast<uint8_t>(pidHeatDutyCycle);
+  immediateStop();
 
-  if (status.heatDutyCycle != lastHeatDutyCycle) {
-    //    logger.debug(F("Updating PWM"));
-    // set PWM
-    heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
-                                       HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.heatDutyCycle);
-    heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
-                                       HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.heatDutyCycle);
-    heatingElementPwm.modifyPWMChannel(
-        2, LED_BUILTIN, HEATING_ELEMENT_PWM_FREQUENCY, status.heatDutyCycle);
-    lastHeatDutyCycle = status.heatDutyCycle;
-  }
+  logger.info(F("Autotuning complete! Kd, Ki, Kp are as follows..."));
+  logger.info((String("Kd: ") + String(tuner.getKd())).c_str());
+  logger.info((String("Ki: ") + String(tuner.getKi())).c_str());
+  logger.info((String("Kp: ") + String(tuner.getKp())).c_str());
 }
