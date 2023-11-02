@@ -20,10 +20,10 @@
 uint32_t settleTimeSec = 10;
 uint32_t testTimeSec = 500; // runPid interval = testTimeSec / samples
 const uint16_t samples = 500;
-const float inputSpan = 350;
+const float inputSpan = 300;
 const float outputSpan = 100;
 float outputStart = 0;
-float outputStep = 5;
+float outputStep = 100;
 float tempLimit = 300;
 bool startup = true;
 
@@ -32,16 +32,17 @@ AVR_Slow_PWM heatingElementPwm;
 Status status;
 
 float pidCurrentTemperature, pidTargetTemperature = 130, pidHeatDutyCycle = 0,
-                             Kp, Ki, Kd;
+                             Kp = 24.701, Ki = 0.002, Kd = 0.100;
 
-sTune tuner = sTune(&pidCurrentTemperature, &pidHeatDutyCycle, sTune::Mixed_PID,
-                    sTune::direct5T, sTune::printOFF);
+sTune tuner =
+    sTune(&pidCurrentTemperature, &pidHeatDutyCycle, sTune::NoOvershoot_PID,
+          sTune::directIP, sTune::printSUMMARY);
 QuickPID heatingElementPid(&pidCurrentTemperature, &pidHeatDutyCycle,
                            &pidTargetTemperature);
 
 MAX31865 max31865(10);
 
-Logger logger = Logger(LogLevel::CRITICAL);
+Logger logger = Logger(LogLevel::DEBUG);
 
 void pwmTimerHandler() { heatingElementPwm.run(); }
 
@@ -50,8 +51,6 @@ void immediateStop() {
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
-  //  heatingElementPwm.disableAll();
-
   status.heatDutyCycle = 0;
 }
 
@@ -122,11 +121,12 @@ void setup() {
   logger.debug(F("Initializing MAX31865_3WIRE..."));
 
   max31865.begin(MAX31865::RTD_3WIRE, MAX31865::FILTER_60HZ);
-  max31865.autoConvert(true);
+  //  max31865.autoConvert(true);
 
   logger.info(F("Thermal management system started"));
 
   heatingElementPid.SetOutputLimits(0, 100);
+  heatingElementPid.SetSampleTimeUs(PID_INTERVAL_MICROS);
 
   tuner.Configure(inputSpan, outputSpan, outputStart, outputStep, testTimeSec,
                   settleTimeSec, samples);
@@ -134,13 +134,27 @@ void setup() {
 
   status.targetTemperature = pidTargetTemperature;
 
-  delay(3000);
+  //  delay(3000);
+
+  // TODO TEMPORARY:
+  //  pidHeatDutyCycle = 100;
+  heatingElementPid.SetMode(
+      QuickPID::Control::automatic); // the PID is turned on
+  heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
+  heatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
+  heatingElementPid.SetTunings(Kp, Ki, Kd); // update PID with the new tunings
 }
 
 /// Reads the temperature sensor, updating the status struct accordingly.
 /// Returns true if the temperature sensor reading was successful, false
 /// otherwise.
 void readTemperature() {
+  if (!max31865.isConversionComplete()) {
+    // TODO we should probably have some sort of check to make sure that we
+    // catch if the conversion never completes
+    return;
+  }
+
   float temperature = max31865.getTemperature(RNOMINAL, RREF);
 
   uint8_t fault = max31865.getFault();
@@ -181,18 +195,18 @@ void readTemperature() {
 
 uint8_t lastHeatDutyCycle = 0;
 uint32_t lastSentStatus = 0;
+// uint32_t lastTemperatureRead = 0;
+
+unsigned long lastPidCompute = 0;
 unsigned long loopTime = 0;
 
 void loop() {
   loopTime = micros();
   // send status
   if (millis() - lastSentStatus > STATUS_SEND_INTERVAL) {
-//    readTemperature();
     sendStatus();
     lastSentStatus = millis();
   }
-
-//    return;
 
   if (status.state == State::FAULT) {
     // if we're in a fault state, don't do anything
@@ -200,47 +214,65 @@ void loop() {
   }
 
   status.isDoorOpen = !digitalRead(DOOR_PIN);
-//  if (status.state == State::HEATING && status.isDoorOpen) {
-//    enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
+
+  readTemperature();
+  pidCurrentTemperature = status.currentTemperature;
+
+  if (status.state == State::HEATING && status.isDoorOpen) {
+    enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
+  }
+
+//  switch (tuner.Run()) {
+//  case sTune::sample: // active once per sample
+//    //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
+//    //    pidTargetTemperature,
+//    //                  0.5f, 3);
+//    tuner.printPidTuner(1);
+//    break;
+//  case sTune::tunings:
+//    tuner.GetAutoTunings(&Kp, &Ki, &Kd); // active just once when sTune is done
+//    //    heatingElementPid.SetOutputLimits(0, outputSpan * 0.1);
+//    //    heatingElementPid.SetSampleTimeUs(100000);
+//    pidHeatDutyCycle = outputStep;
+//    heatingElementPid.SetMode(
+//        QuickPID::Control::automatic); // the PID is turned on
+//    heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
+//    heatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
+//    heatingElementPid.SetTunings(Kp, Ki, Kd); // update PID with the new tunings
+//    break;
+//
+//  case sTune::runPid: // active once per sample period
+//    if (startup &&
+//        pidCurrentTemperature > pidTargetTemperature - 5) { // reduce overshoot
+//      startup = false;
+//      pidHeatDutyCycle -= 9;
+//      heatingElementPid.SetMode(QuickPID::Control::manual);
+//      heatingElementPid.SetMode(QuickPID::Control::automatic);
+//    }
+//    heatingElementPid.Compute();
+//    //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
+//    //    pidTargetTemperature,
+//    //                  0.5f, 3);
+//    tuner.printPidTuner(1);
+//    break;
 //  }
+//
+//  pidCurrentTemperature = status.currentTemperature;
+//
+  if (micros() - lastPidCompute > PID_INTERVAL_MICROS + 1000) {
+    logger.warn((String("PID interval overrun: ") +
+                 String(micros() - lastPidCompute - PID_INTERVAL_MICROS) +
+                 String("us"))
+                    .c_str());
+  }
 
-  switch (tuner.Run()) {
-  case sTune::sample:
-    readTemperature();
-    pidCurrentTemperature = status.currentTemperature;
-    //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
-    //    pidTargetTemperature,
-    //                  0.5f, 3);
-    tuner.printPidTuner(1);
-    break;
-  case sTune::tunings:
-    tuner.GetAutoTunings(&Kp, &Ki, &Kd); // sketch variables updated by sTune
-    //    heatingElementPid.SetOutputLimits(0, outputSpan * 0.1);
-    //    heatingElementPid.SetSampleTimeUs(100000);
-    pidHeatDutyCycle = outputStep;
-    heatingElementPid.SetMode(
-        QuickPID::Control::automatic); // the PID is turned on
-    heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
-    heatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwCondition);
-    heatingElementPid.SetTunings(Kp, Ki, Kd); // update PID with the new tunings
-    break;
+  heatingElementPid.Compute();
+  lastPidCompute = micros();
 
-  case sTune::runPid:
-    if (startup &&
-        pidCurrentTemperature > pidTargetTemperature - 10) { // reduce overshoot
-      startup = false;
-      pidHeatDutyCycle -= 9;
-      heatingElementPid.SetMode(QuickPID::Control::manual);
-      heatingElementPid.SetMode(QuickPID::Control::automatic);
-    }
-    readTemperature();
-    pidCurrentTemperature = status.currentTemperature;
-    heatingElementPid.Compute();
-    //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
-    //    pidTargetTemperature,
-    //                  0.5f, 3);
-    tuner.printPidTuner(1);
-    break;
+  if (pidHeatDutyCycle > 100 || pidHeatDutyCycle < 0) {
+    logger.warn(F("PID output out of bounds!"));
+    Serial.println(pidHeatDutyCycle);
+    enterErrorState(ERROR_CURRENT_TEMPERATURE_FAULT);
   }
 
   status.heatDutyCycle = static_cast<uint8_t>(pidHeatDutyCycle);
@@ -259,6 +291,7 @@ void loop() {
   loopTime = micros() - loopTime;
 
   if (loopTime > LOOP_SLOW_THRESHOLD_MICROS) {
-    logger.warn((String("Loop time >500us: ") + String(loopTime) + String("us")).c_str());
+    logger.warn((String("Loop time >500us: ") + String(loopTime) + String("us"))
+                    .c_str());
   }
 }

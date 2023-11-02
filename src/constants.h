@@ -30,8 +30,15 @@
 #define RNOMINAL 100.0
 
 #define UI_TIMEOUT 1000          // in milliseconds
-#define STATUS_SEND_INTERVAL 5000 // ms
+#define STATUS_SEND_INTERVAL 1000 // ms
+
+
+
+#define PID_INTERVAL_MICROS 50000 // 50ms
 #define LOOP_SLOW_THRESHOLD_MICROS 5000 // 5ms
+
+// max allowable time between temperature reads
+#define TEMPERATURE_READ_THRESHOLD_MILLIS 100
 
 // binary error codes (can be combined)
 #define ERROR_DOOR_OPENED_DURING_HEATING 0x01
