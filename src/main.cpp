@@ -181,8 +181,10 @@ void readTemperature() {
 
 uint8_t lastHeatDutyCycle = 0;
 uint32_t lastSentStatus = 0;
+unsigned long loopTime = 0;
 
 void loop() {
+  loopTime = micros();
   // send status
   if (millis() - lastSentStatus > STATUS_SEND_INTERVAL) {
 //    readTemperature();
@@ -253,5 +255,10 @@ void loop() {
                                        HEATING_ELEMENT_PWM_FREQUENCY,
                                        status.heatDutyCycle);
     lastHeatDutyCycle = status.heatDutyCycle;
+  }
+  loopTime = micros() - loopTime;
+
+  if (loopTime > LOOP_SLOW_THRESHOLD_MICROS) {
+    logger.warn((String("Loop time >500us: ") + String(loopTime) + String("us")).c_str());
   }
 }

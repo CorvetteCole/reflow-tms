@@ -31,6 +31,7 @@
 
 #define UI_TIMEOUT 1000          // in milliseconds
 #define STATUS_SEND_INTERVAL 5000 // ms
+#define LOOP_SLOW_THRESHOLD_MICROS 5000 // 5ms
 
 // binary error codes (can be combined)
 #define ERROR_DOOR_OPENED_DURING_HEATING 0x01
