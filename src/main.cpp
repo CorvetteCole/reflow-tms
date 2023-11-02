@@ -200,11 +200,11 @@ void loop() {
   // send status
   if (millis() - lastSentPidTunerStatus > PID_TUNER_SEND_INTERVAL) {
     // record current temperature to buffer
-    for (int i = 0; i < stabilizationWindow - 1; i++) {
-      previousTemperaturePoints[i] = previousTemperaturePoints[i + 1];
-    }
-    previousTemperaturePoints[stabilizationWindow - 1] =
-        status.currentTemperature;
+//    for (int i = 0; i < stabilizationWindow - 1; i++) {
+//      previousTemperaturePoints[i] = previousTemperaturePoints[i + 1];
+//    }
+//    previousTemperaturePoints[stabilizationWindow - 1] =
+//        status.currentTemperature;
 
     // send time, current duty cycle, and current temperature
     // time should be in seconds with decimal
@@ -229,20 +229,20 @@ void loop() {
   if (targetTemperatureCurveIndex < numTargetTemperatureCurvePoints) {
     if (status.state == State::IDLE) {
       // calculate whether the temperature is stable
-      bool isTemperatureStable = true;
-      for (int i = 0; i < stabilizationWindow - 1; i++) {
-        if (abs(previousTemperaturePoints[i] -
-                previousTemperaturePoints[i + 1]) > stabilizedThreshold) {
-          isTemperatureStable = false;
-          break;
-        }
-      }
+//      bool isTemperatureStable = true;
+//      for (int i = 0; i < stabilizationWindow - 1; i++) {
+//        if (abs(previousTemperaturePoints[i] -
+//                previousTemperaturePoints[i + 1]) > stabilizedThreshold) {
+//          isTemperatureStable = false;
+//          break;
+//        }
+//      }
 
       bool isWithinThreshold =
           abs(status.currentTemperature - status.targetTemperature) <=
           targetTemperatureAchievedThreshold;
 
-      if (isTemperatureStable && isWithinThreshold) {
+      if (/*isTemperatureStable && */isWithinThreshold) {
         targetTemperatureCurveIndex++;
         status.targetTemperature =
             targetTemperatureCurvePoints[targetTemperatureCurveIndex];
