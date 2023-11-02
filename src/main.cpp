@@ -118,17 +118,19 @@ void setup() {
   logger.debug(F("Initializing PID..."));
 
   topHeatingElementPid.SetOutputLimits(0, 100);
+  topHeatingElementPid.SetSampleTimeUs(PID_INTERVAL_MICROS);
   topHeatingElementPid.SetTunings(
       TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI, TOP_HEATING_ELEMENT_KD);
-  topHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnMeas);
-  topHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
+  topHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
+  topHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwCondition);
 
   bottomHeatingElementPid.SetOutputLimits(0, 100);
+  bottomHeatingElementPid.SetSampleTimeUs(PID_INTERVAL_MICROS);
   bottomHeatingElementPid.SetTunings(BOTTOM_HEATING_ELEMENT_KP,
                                      BOTTOM_HEATING_ELEMENT_KI,
                                      BOTTOM_HEATING_ELEMENT_KD);
-  bottomHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnMeas);
-  bottomHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
+  bottomHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
+  bottomHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwCondition);
 
   logger.debug(F("Initializing MAX31865_3WIRE..."));
 
@@ -185,6 +187,49 @@ void readTemperature() {
     // temperature is an unsigned int, so this is a sign that something is wrong
     enterErrorState(ERROR_CURRENT_TEMPERATURE_TOO_LOW);
   }
+}
+
+void computePid() {
+  static unsigned long lastPidCompute = 0;
+
+  if (status.state != State::HEATING) {
+    // only compute PID if we are heating, since it is expensive
+    return;
+  }
+
+  // if we are past the PID interval, we should log a warning
+  if (lastPidCompute != 0 &&
+      micros() - lastPidCompute > PID_INTERVAL_MICROS + 1000) {
+    logger.warn(F("PID loop interval too long!"));
+  }
+
+  pidTargetTemperature = status.targetTemperature;
+  pidCurrentTemperature = status.currentTemperature;
+
+  topHeatingElementPid.Compute();
+  bottomHeatingElementPid.Compute();
+  lastPidCompute = micros();
+
+  if (pidTopHeatDutyCycle > 100) {
+    logger.warn(F("PID top heat duty cycle > 100%!"));
+    pidTopHeatDutyCycle = 100;
+  } else if (pidTopHeatDutyCycle < 0) {
+    logger.warn(F("PID top heat duty cycle < 0%!"));
+    pidTopHeatDutyCycle = 0;
+  }
+
+  if (pidBottomHeatDutyCycle > 100) {
+    logger.warn(F("PID bottom heat duty cycle > 100%!"));
+    pidBottomHeatDutyCycle = 100;
+  } else if (pidBottomHeatDutyCycle < 0) {
+    logger.warn(F("PID bottom heat duty cycle < 0%!"));
+    pidBottomHeatDutyCycle = 0;
+  }
+
+  // we can statically cast to uint8_t because the output limits are set
+  // to 0-100
+  status.topHeatDutyCycle = static_cast<uint8_t>(pidTopHeatDutyCycle);
+  status.bottomHeatDutyCycle = static_cast<uint8_t>(pidBottomHeatDutyCycle);
 }
 
 char receivedChars[INPUT_BUFFER_SIZE];
@@ -333,7 +378,7 @@ void loop() {
       newData = false;
     }
   } else if (lastUiHeartbeat != 0 && millis() - lastUiHeartbeat > UI_TIMEOUT) {
-//    enterErrorState(ERROR_UI_TIMEOUT);
+    //    enterErrorState(ERROR_UI_TIMEOUT); //TODO
   }
 
   // send status
@@ -366,34 +411,30 @@ void loop() {
       status.topHeatDutyCycle = 0;
       status.bottomHeatDutyCycle = 0;
       digitalWrite(FAN_PIN, LOW);
-      //    heatingElementPwm.disableAll(); // disable timers while we aren't
-      //    using them
     }
   } else {
     if (status.state != State::COOLING &&
         status.currentTemperature > status.targetTemperature &&
         status.currentTemperature - status.targetTemperature > 10) {
       logger.info(F("Started cooling"));
+      topHeatingElementPid.SetMode(QuickPID::Control::manual);
+      topHeatingElementPid.Reset();
+      bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
+      bottomHeatingElementPid.Reset();
       status.state = State::COOLING;
     } else if (status.state != State::HEATING &&
                status.targetTemperature > status.currentTemperature) {
       logger.info(F("Started heating"));
       status.state = State::HEATING;
       digitalWrite(FAN_PIN, HIGH);
-      topHeatingElementPid.SetMode(QuickPID::Control::automatic);
-      bottomHeatingElementPid.SetMode(QuickPID::Control::automatic);
+      topHeatingElementPid.SetMode(QuickPID::Control::timer);
+      bottomHeatingElementPid.SetMode(QuickPID::Control::timer);
     }
 
-    //    logger.debug(F("Calculating duty cycles"));
-    //    heatingElementPwm.enableAll();
-    pidTargetTemperature = status.targetTemperature;
-    pidCurrentTemperature = status.currentTemperature;
-    topHeatingElementPid.Compute();
-    bottomHeatingElementPid.Compute();
-    // we can statically cast to uint8_t because the output limits are set to
-    // 0-100
-    status.topHeatDutyCycle = static_cast<uint8_t>(pidTopHeatDutyCycle);
-    status.bottomHeatDutyCycle = static_cast<uint8_t>(pidBottomHeatDutyCycle);
+    if (status.state == State::HEATING) {
+      // only compute when we need it - we're heating
+      computePid();
+    }
   }
 
   if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
