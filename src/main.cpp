@@ -16,6 +16,8 @@
 // Don't change these numbers to make higher Timer freq. System can hang
 #define HW_TIMER_INTERVAL_FREQ 1000L
 
+#define PID_ONLY
+
 // user settings
 uint32_t settleTimeSec = 10;
 uint32_t testTimeSec = 500; // runPid interval = testTimeSec / samples
@@ -134,15 +136,14 @@ void setup() {
 
   status.targetTemperature = pidTargetTemperature;
 
-  //  delay(3000);
-
-  // TODO TEMPORARY:
+#ifdef PID_ONLY
   //  pidHeatDutyCycle = 100;
   heatingElementPid.SetMode(
       QuickPID::Control::automatic); // the PID is turned on
   heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
   heatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
   heatingElementPid.SetTunings(Kp, Ki, Kd); // update PID with the new tunings
+#endif
 }
 
 /// Reads the temperature sensor, updating the status struct accordingly.
@@ -222,52 +223,51 @@ void loop() {
     enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
   }
 
-//  switch (tuner.Run()) {
-//  case sTune::sample: // active once per sample
-//    //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
-//    //    pidTargetTemperature,
-//    //                  0.5f, 3);
-//    tuner.printPidTuner(1);
-//    break;
-//  case sTune::tunings:
-//    tuner.GetAutoTunings(&Kp, &Ki, &Kd); // active just once when sTune is done
-//    //    heatingElementPid.SetOutputLimits(0, outputSpan * 0.1);
-//    //    heatingElementPid.SetSampleTimeUs(100000);
-//    pidHeatDutyCycle = outputStep;
-//    heatingElementPid.SetMode(
-//        QuickPID::Control::automatic); // the PID is turned on
-//    heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
-//    heatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
-//    heatingElementPid.SetTunings(Kp, Ki, Kd); // update PID with the new tunings
-//    break;
-//
-//  case sTune::runPid: // active once per sample period
-//    if (startup &&
-//        pidCurrentTemperature > pidTargetTemperature - 5) { // reduce overshoot
-//      startup = false;
-//      pidHeatDutyCycle -= 9;
-//      heatingElementPid.SetMode(QuickPID::Control::manual);
-//      heatingElementPid.SetMode(QuickPID::Control::automatic);
-//    }
-//    heatingElementPid.Compute();
-//    //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
-//    //    pidTargetTemperature,
-//    //                  0.5f, 3);
-//    tuner.printPidTuner(1);
-//    break;
-//  }
-//
-//  pidCurrentTemperature = status.currentTemperature;
-//
+#ifdef PID_ONLY
   if (micros() - lastPidCompute > PID_INTERVAL_MICROS + 1000) {
     logger.warn((String("PID interval overrun: ") +
                  String(micros() - lastPidCompute - PID_INTERVAL_MICROS) +
                  String("us"))
                     .c_str());
   }
-
   heatingElementPid.Compute();
   lastPidCompute = micros();
+#else
+  switch (tuner.Run()) {
+  case sTune::sample: // active once per sample
+    //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
+    //    pidTargetTemperature,
+    //                  0.5f, 3);
+    tuner.printPidTuner(1);
+    break;
+  case sTune::tunings:
+    tuner.GetAutoTunings(&Kp, &Ki, &Kd); // active just once when sTune is done
+    //    heatingElementPid.SetOutputLimits(0, outputSpan * 0.1);
+    //    heatingElementPid.SetSampleTimeUs(100000);
+    pidHeatDutyCycle = outputStep;
+    heatingElementPid.SetMode(
+        QuickPID::Control::automatic); // the PID is turned on
+    heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
+    heatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
+    heatingElementPid.SetTunings(Kp, Ki, Kd); // update PID with the new tunings
+    break;
+
+  case sTune::runPid: // active once per sample period
+    if (startup &&
+        pidCurrentTemperature > pidTargetTemperature - 5) { // reduce overshoot
+      startup = false;
+      pidHeatDutyCycle -= 9;
+      heatingElementPid.SetMode(QuickPID::Control::manual);
+      heatingElementPid.SetMode(QuickPID::Control::automatic);
+    }
+    heatingElementPid.Compute();
+    //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
+    //    pidTargetTemperature,
+    //                  0.5f, 3);
+    tuner.printPidTuner(1);
+    break;
+  }
+#endif
 
   if (pidHeatDutyCycle > 100 || pidHeatDutyCycle < 0) {
     logger.warn(F("PID output out of bounds!"));
