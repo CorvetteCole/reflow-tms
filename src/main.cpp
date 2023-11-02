@@ -11,7 +11,7 @@
 #include "status.h"
 #include "utils.cpp"
 #include <AVR_Slow_PWM.h>
-#include <Adafruit_MAX31865.h>
+#include <MAX31865_NonBlocking.h>
 
 // Don't change these numbers to make higher Timer freq. System can hang
 #define HW_TIMER_INTERVAL_FREQ 10000L
@@ -39,7 +39,7 @@ sTune tuner = sTune(&pidCurrentTemperature, &pidHeatDutyCycle, sTune::Mixed_PID,
 QuickPID heatingElementPid(&pidCurrentTemperature, &pidHeatDutyCycle,
                            &pidTargetTemperature);
 
-Adafruit_MAX31865 max31865 = Adafruit_MAX31865(CS_PIN, DI_PIN, DO_PIN, CLK_PIN);
+MAX31865 max31865(10);
 
 Logger logger = Logger(LogLevel::CRITICAL);
 
@@ -129,7 +129,8 @@ void setup() {
 
   logger.debug(F("Initializing MAX31865_3WIRE..."));
 
-  max31865.begin(MAX31865_3WIRE);
+  max31865.begin(MAX31865::RTD_3WIRE, MAX31865::FILTER_60HZ);
+  max31865.autoConvert(true);
 
   logger.info(F("Thermal management system started"));
 
@@ -148,40 +149,32 @@ void setup() {
 /// Returns true if the temperature sensor reading was successful, false
 /// otherwise.
 void readTemperature() {
-  uint16_t rtd = max31865.readRTD();
-  float temperature = max31865.temperature(RNOMINAL, RREF);
+  float temperature = max31865.getTemperature(RNOMINAL, RREF);
 
-  if (logger.logLevel == LogLevel::DEBUG) {
-    // format strings and print debug
-    float ratio = rtd;
-    ratio /= 32768;
-
-    logger.debug((String("Resistance: ") + String(RREF * ratio, 8)).c_str());
-  }
-
-  uint8_t fault = max31865.readFault();
+  uint8_t fault = max31865.getFault();
   if (fault) {
     enterErrorState(ERROR_CURRENT_TEMPERATURE_FAULT);
 
-    if (fault & MAX31865_FAULT_HIGHTHRESH) {
+    if (fault & MAX31865::FAULT_HIGHTHRESH_BIT) {
       logger.debug(F("RTD High Threshold"));
     }
-    if (fault & MAX31865_FAULT_LOWTHRESH) {
+    if (fault & MAX31865::FAULT_LOWTHRESH_BIT) {
       logger.debug(F("RTD Low Threshold"));
     }
-    if (fault & MAX31865_FAULT_REFINLOW) {
+    if (fault & MAX31865::FAULT_REFINLOW_BIT) {
       logger.debug(F("REFIN- > 0.85 x Bias"));
     }
-    if (fault & MAX31865_FAULT_REFINHIGH) {
+    if (fault & MAX31865::FAULT_REFINHIGH_BIT) {
       logger.debug(F("REFIN- < 0.85 x Bias - FORCE- open"));
     }
-    if (fault & MAX31865_FAULT_RTDINLOW) {
+    if (fault & MAX31865::FAULT_RTDINLOW_BIT) {
       logger.debug(F("RTDIN- < 0.85 x Bias - FORCE- open"));
     }
-    if (fault & MAX31865_FAULT_OVUV) {
+    if (fault & MAX31865::FAULT_OVUV_BIT) {
       logger.debug(F("Under/Over voltage"));
     }
-    delay(100);
+    max31865.clearFault();
+    delay(100); // TODO ?
   }
   status.currentTemperature = temperature;
 
