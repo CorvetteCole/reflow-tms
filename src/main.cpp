@@ -23,7 +23,7 @@ const uint16_t samples = 500;
 const float inputSpan = 350;
 const float outputSpan = 100;
 float outputStart = 0;
-float outputStep = 100;
+float outputStep = 5;
 float tempLimit = 300;
 bool startup = true;
 
@@ -35,7 +35,7 @@ float pidCurrentTemperature, pidTargetTemperature = 130, pidHeatDutyCycle = 0,
                              Kp, Ki, Kd;
 
 sTune tuner = sTune(&pidCurrentTemperature, &pidHeatDutyCycle, sTune::Mixed_PID,
-                    sTune::directIP, sTune::printALL);
+                    sTune::direct5T, sTune::printOFF);
 QuickPID heatingElementPid(&pidCurrentTemperature, &pidHeatDutyCycle,
                            &pidTargetTemperature);
 
@@ -224,6 +224,7 @@ void loop() {
     //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
     //    pidTargetTemperature,
     //                  0.5f, 3);
+    tuner.printPidTuner(1);
     break;
   case sTune::tunings:
     tuner.GetAutoTunings(&Kp, &Ki, &Kd); // sketch variables updated by sTune
@@ -251,6 +252,7 @@ void loop() {
     //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
     //    pidTargetTemperature,
     //                  0.5f, 3);
+    tuner.printPidTuner(1);
     break;
   }
 
