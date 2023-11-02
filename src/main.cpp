@@ -50,8 +50,6 @@ void immediateStop() {
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
-  heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
-                                     HEATING_ELEMENT_PWM_FREQUENCY, 0);
   //  heatingElementPwm.disableAll();
 
   status.heatDutyCycle = 0;
@@ -94,8 +92,6 @@ void setup() {
         F("Can't set ITimer1 correctly. Select another freq. or timer"));
   }
 
-  // initialize built-in LED pin as an output (will blink on heartbeat)
-  pinMode(LED_BUILTIN, OUTPUT);
   pinMode(FAN_PIN, OUTPUT);
   pinMode(TOP_HEATING_ELEMENT_PIN, OUTPUT);
   pinMode(BOTTOM_HEATING_ELEMENT_PIN, OUTPUT);
@@ -115,10 +111,6 @@ void setup() {
                            HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.setPWM(BOTTOM_HEATING_ELEMENT_PIN,
                            HEATING_ELEMENT_PWM_FREQUENCY, 0);
-  heatingElementPwm.setPWM(LED_BUILTIN, HEATING_ELEMENT_PWM_FREQUENCY, 0);
-
-  //  heatingElementPwm.disableAll(); // disable timers while we aren't using
-  //  them
 
   logger.debug(F("Initializing PID..."));
 
@@ -260,8 +252,6 @@ void loop() {
     heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
                                        HEATING_ELEMENT_PWM_FREQUENCY,
                                        status.heatDutyCycle);
-    heatingElementPwm.modifyPWMChannel(
-        2, LED_BUILTIN, HEATING_ELEMENT_PWM_FREQUENCY, status.heatDutyCycle);
     lastHeatDutyCycle = status.heatDutyCycle;
   }
 }

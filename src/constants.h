@@ -8,14 +8,11 @@
 #define MIN_TEMPERATURE 0
 
 #define TOP_HEATING_ELEMENT_PIN 9
-#define BOTTOM_HEATING_ELEMENT_PIN 10
+#define BOTTOM_HEATING_ELEMENT_PIN 8
+
 #define DOOR_PIN 2
 #define RESET_PIN 3
 #define FAN_PIN 4
-#define CS_PIN 14
-#define DI_PIN 15
-#define DO_PIN 16
-#define CLK_PIN 17
 
 #define TOP_HEATING_ELEMENT_KP 3.0f
 #define TOP_HEATING_ELEMENT_KI 0.0f
