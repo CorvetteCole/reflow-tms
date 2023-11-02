@@ -120,14 +120,14 @@ void setup() {
   topHeatingElementPid.SetOutputLimits(0, 100);
   topHeatingElementPid.SetTunings(
       TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI, TOP_HEATING_ELEMENT_KD);
-  topHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
+  topHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnMeas);
   topHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
 
   bottomHeatingElementPid.SetOutputLimits(0, 100);
   bottomHeatingElementPid.SetTunings(BOTTOM_HEATING_ELEMENT_KP,
                                      BOTTOM_HEATING_ELEMENT_KI,
                                      BOTTOM_HEATING_ELEMENT_KD);
-  bottomHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
+  bottomHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnMeas);
   bottomHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
 
   logger.debug(F("Initializing MAX31865_3WIRE..."));
@@ -333,7 +333,7 @@ void loop() {
       newData = false;
     }
   } else if (lastUiHeartbeat != 0 && millis() - lastUiHeartbeat > UI_TIMEOUT) {
-    enterErrorState(ERROR_UI_TIMEOUT);
+//    enterErrorState(ERROR_UI_TIMEOUT);
   }
 
   // send status
