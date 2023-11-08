@@ -329,7 +329,6 @@ void loop() {
     lastHeatDutyCycle = status.heatDutyCycle;
   }
   loopTime = micros() - loopTime;
-  logger.debug((String("Loop time: ") + String(loopTime) + String("us")).c_str());
 
   if (loopTime > LOOP_SLOW_THRESHOLD_MICROS) {
     logger.warn(
