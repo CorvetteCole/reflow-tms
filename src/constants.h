@@ -1,7 +1,7 @@
 #ifndef REFLOW_TMS_CONSTANTS_H
 #define REFLOW_TMS_CONSTANTS_H
 
-#define HEATING_ELEMENT_PWM_FREQUENCY 0.25f
+#define HEATING_ELEMENT_PWM_FREQUENCY 1.0f
 #define MAX_TARGET_TEMPERATURE 300
 #define MIN_TARGET_TEMPERATURE 30
 #define MAX_TEMPERATURE 325
@@ -13,6 +13,7 @@
 #define DOOR_PIN 2
 #define RESET_PIN 3
 #define FAN_PIN 4
+#define BUZZER_PIN 5
 
 #define TOP_HEATING_ELEMENT_KP 3.0f
 #define TOP_HEATING_ELEMENT_KI 0.0f
@@ -30,11 +31,11 @@
 #define RNOMINAL 100.0
 
 #define UI_TIMEOUT 1000          // in milliseconds
-#define STATUS_SEND_INTERVAL 1000 // ms
+#define STATUS_SEND_INTERVAL 500 // ms
 
 
 
-#define PID_INTERVAL_MICROS 50000 // 50ms
+#define PID_INTERVAL_MICROS 100000 // 100ms
 #define LOOP_SLOW_THRESHOLD_MICROS 5000 // 5ms
 
 // max allowable time between temperature reads

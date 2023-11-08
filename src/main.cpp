@@ -20,12 +20,12 @@
 
 // user settings
 uint32_t settleTimeSec = 10;
-uint32_t testTimeSec = 500; // runPid interval = testTimeSec / samples
-const uint16_t samples = 500;
+uint32_t testTimeSec = 600; // runPid interval = testTimeSec / samples
+const uint16_t samples = 1000;
 const float inputSpan = 300;
 const float outputSpan = 100;
 float outputStart = 0;
-float outputStep = 100;
+float outputStep = 30;
 float tempLimit = 300;
 bool startup = true;
 
@@ -33,12 +33,40 @@ AVR_Slow_PWM heatingElementPwm;
 
 Status status;
 
-float pidCurrentTemperature, pidTargetTemperature = 130, pidHeatDutyCycle = 0,
-                             Kp = 24.701, Ki = 0.002, Kd = 0.100;
+// 0.045
+float pidCurrentTemperature,
+    pidTargetTemperature = 130, pidHeatDutyCycle = 0,
+    //                             Kp = 60.0, Ki = 0.0, Kd = 60.0;
+//    Kp = 1.3517062446434995, Ki = 0.0031333381510065665, Kd = 98.43382315402697;
+    Kp = 100, Ki = 0.025, Kd = 100;
 
-sTune tuner =
-    sTune(&pidCurrentTemperature, &pidHeatDutyCycle, sTune::NoOvershoot_PID,
-          sTune::directIP, sTune::printSUMMARY);
+// TODO should have separate PID per stage
+// https://github.com/rocketscream/Reflow-Oven-Controller/blob/master/reflowOvenController.ino
+// #define TEMPERATURE_ROOM 50
+// #define TEMPERATURE_SOAK_MIN 150
+// #define TEMPERATURE_SOAK_MAX 200
+// #define TEMPERATURE_REFLOW_MAX 250
+// #define TEMPERATURE_COOL_MIN 100
+// #define SENSOR_SAMPLING_TIME 1000
+// #define SOAK_TEMPERATURE_STEP 5
+// #define SOAK_MICRO_PERIOD 9000
+// #define DEBOUNCE_PERIOD_MIN 50
+//
+//// ***** PREHEAT STAGE *****
+// #define PID_KP_PREHEAT 100
+// #define PID_KI_PREHEAT 0.025
+// #define PID_KD_PREHEAT 20
+//// ***** SOAKING STAGE *****
+// #define PID_KP_SOAK 300
+// #define PID_KI_SOAK 0.05
+// #define PID_KD_SOAK 250
+//// ***** REFLOW STAGE *****
+// #define PID_KP_REFLOW 300
+// #define PID_KI_REFLOW 0.05
+// #define PID_KD_REFLOW 350
+
+sTune tuner = sTune(&pidCurrentTemperature, &pidHeatDutyCycle,
+                    sTune::CohenCoon_PID, sTune::direct5T, sTune::printOFF);
 QuickPID heatingElementPid(&pidCurrentTemperature, &pidHeatDutyCycle,
                            &pidTargetTemperature);
 
@@ -61,8 +89,14 @@ void sendStatus() {
   Serial.println();
 }
 
+void soundAlarm() {
+  // TODO need to call for cooling
+  tone(BUZZER_PIN, 4000);
+}
+
 void enterErrorState(uint8_t error) {
   if (status.state != State::FAULT) {
+    soundAlarm();
     immediateStop();
     status.state = State::FAULT;
   }
@@ -96,6 +130,7 @@ void setup() {
   pinMode(FAN_PIN, OUTPUT);
   pinMode(TOP_HEATING_ELEMENT_PIN, OUTPUT);
   pinMode(BOTTOM_HEATING_ELEMENT_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
 
   // initialize door sensor pin as an input
   pinMode(DOOR_PIN, INPUT_PULLUP);
@@ -136,8 +171,14 @@ void setup() {
 
   status.targetTemperature = pidTargetTemperature;
 
+  digitalWrite(FAN_PIN, HIGH);
+
+//  tone(BUZZER_PIN, 4000);
+  status.heatDutyCycle = 100;
+
+
 #ifdef PID_ONLY
-  //  pidHeatDutyCycle = 100;
+  pidHeatDutyCycle = 100;
   heatingElementPid.SetMode(
       QuickPID::Control::automatic); // the PID is turned on
   heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
@@ -223,6 +264,8 @@ void loop() {
     enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
   }
 
+//  return;
+
 #ifdef PID_ONLY
   if (micros() - lastPidCompute > PID_INTERVAL_MICROS + 1000) {
     logger.warn((String("PID interval overrun: ") +
@@ -235,31 +278,29 @@ void loop() {
 #else
   switch (tuner.Run()) {
   case sTune::sample: // active once per sample
-    //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
-    //    pidTargetTemperature,
-    //                  0.5f, 3);
+                      //    tuner.plotter(pidCurrentTemperature,
+                      //    pidHeatDutyCycle, pidTargetTemperature,
+                      //                  0.5f, 3);
     tuner.printPidTuner(1);
     break;
   case sTune::tunings:
+    for (uint8_t i = 0; i < 9; i++) {
+      tuner.SetTuningMethod(static_cast<sTune::TuningMethod>(i));
+      tuner.printTunings();
+    }
+
     tuner.GetAutoTunings(&Kp, &Ki, &Kd); // active just once when sTune is done
-    //    heatingElementPid.SetOutputLimits(0, outputSpan * 0.1);
-    //    heatingElementPid.SetSampleTimeUs(100000);
+    //        heatingElementPid.SetOutputLimits(0, outputSpan * 0.1);
+    heatingElementPid.SetSampleTimeUs(PID_INTERVAL_MICROS);
     pidHeatDutyCycle = outputStep;
     heatingElementPid.SetMode(
         QuickPID::Control::automatic); // the PID is turned on
-    heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
+    heatingElementPid.SetProportionalMode(QuickPID::pMode::pOnMeas);
     heatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
     heatingElementPid.SetTunings(Kp, Ki, Kd); // update PID with the new tunings
     break;
 
   case sTune::runPid: // active once per sample period
-    if (startup &&
-        pidCurrentTemperature > pidTargetTemperature - 5) { // reduce overshoot
-      startup = false;
-      pidHeatDutyCycle -= 9;
-      heatingElementPid.SetMode(QuickPID::Control::manual);
-      heatingElementPid.SetMode(QuickPID::Control::automatic);
-    }
     heatingElementPid.Compute();
     //    tuner.plotter(pidCurrentTemperature, pidHeatDutyCycle,
     //    pidTargetTemperature,
@@ -275,7 +316,7 @@ void loop() {
     enterErrorState(ERROR_CURRENT_TEMPERATURE_FAULT);
   }
 
-  status.heatDutyCycle = static_cast<uint8_t>(pidHeatDutyCycle);
+//  status.heatDutyCycle = static_cast<uint8_t>(pidHeatDutyCycle); // TODO don't do this
 
   if (status.heatDutyCycle != lastHeatDutyCycle) {
     //    logger.debug(F("Updating PWM"));
@@ -289,9 +330,11 @@ void loop() {
     lastHeatDutyCycle = status.heatDutyCycle;
   }
   loopTime = micros() - loopTime;
+  logger.debug((String("Loop time: ") + String(loopTime) + String("us")).c_str());
 
   if (loopTime > LOOP_SLOW_THRESHOLD_MICROS) {
-    logger.warn((String("Loop time >500us: ") + String(loopTime) + String("us"))
-                    .c_str());
+    logger.warn(
+        (String("Loop time >5000us: ") + String(loopTime) + String("us"))
+            .c_str());
   }
 }
