@@ -171,10 +171,9 @@ void setup() {
 
   status.targetTemperature = pidTargetTemperature;
 
-  digitalWrite(FAN_PIN, HIGH);
-
+//  digitalWrite(FAN_PIN, HIGH);
 //  tone(BUZZER_PIN, 4000);
-  status.heatDutyCycle = 100;
+//  status.heatDutyCycle = 100;
 
 
 #ifdef PID_ONLY
