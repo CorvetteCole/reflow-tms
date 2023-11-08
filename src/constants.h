@@ -11,7 +11,6 @@
 #define BOTTOM_HEATING_ELEMENT_PIN 8
 
 #define DOOR_PIN 2
-#define RESET_PIN 3
 #define FAN_PIN 4
 #define BUZZER_PIN 5
 

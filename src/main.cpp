@@ -37,7 +37,8 @@ Status status;
 float pidCurrentTemperature,
     pidTargetTemperature = 130, pidHeatDutyCycle = 0,
     //                             Kp = 60.0, Ki = 0.0, Kd = 60.0;
-//    Kp = 1.3517062446434995, Ki = 0.0031333381510065665, Kd = 98.43382315402697;
+    //    Kp = 1.3517062446434995, Ki = 0.0031333381510065665, Kd
+    //    = 98.43382315402697;
     Kp = 100, Ki = 0.025, Kd = 100;
 
 // TODO should have separate PID per stage
@@ -134,11 +135,6 @@ void setup() {
 
   // initialize door sensor pin as an input
   pinMode(DOOR_PIN, INPUT_PULLUP);
-  pinMode(RESET_PIN, INPUT_PULLUP);
-
-  logger.debug(F("Attaching interrupts..."));
-
-  //  attachInterrupt(digitalPinToInterrupt(RESET_PIN), resetFunc, FALLING);
 
   logger.debug(F("Initializing PWM..."));
 
@@ -171,10 +167,9 @@ void setup() {
 
   status.targetTemperature = pidTargetTemperature;
 
-//  digitalWrite(FAN_PIN, HIGH);
-//  tone(BUZZER_PIN, 4000);
-//  status.heatDutyCycle = 100;
-
+  //  digitalWrite(FAN_PIN, HIGH);
+  //  tone(BUZZER_PIN, 4000);
+  //  status.heatDutyCycle = 100;
 
 #ifdef PID_ONLY
   pidHeatDutyCycle = 100;
@@ -263,7 +258,7 @@ void loop() {
     enterErrorState(ERROR_DOOR_OPENED_DURING_HEATING);
   }
 
-//  return;
+  //  return;
 
 #ifdef PID_ONLY
   if (micros() - lastPidCompute > PID_INTERVAL_MICROS + 1000) {
@@ -315,7 +310,8 @@ void loop() {
     enterErrorState(ERROR_CURRENT_TEMPERATURE_FAULT);
   }
 
-//  status.heatDutyCycle = static_cast<uint8_t>(pidHeatDutyCycle); // TODO don't do this
+  //  status.heatDutyCycle = static_cast<uint8_t>(pidHeatDutyCycle); // TODO
+  //  don't do this
 
   if (status.heatDutyCycle != lastHeatDutyCycle) {
     //    logger.debug(F("Updating PWM"));
