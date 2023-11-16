@@ -268,6 +268,7 @@ bool receiveCommand() {
 }
 
 // TODO: detect current temperature not rising during heating
+// TODO: implement CRC16 checksums for commands
 void loop() {
   static uint8_t lastTopHeatDutyCycle = 0;
   static uint8_t lastBottomHeatDutyCycle = 0;
