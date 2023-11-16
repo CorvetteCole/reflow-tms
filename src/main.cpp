@@ -433,7 +433,9 @@ void loop() {
       if (status.isDoorOpen) {
         noTone(BUZZER_PIN);
       } else {
+#ifndef DISABLE_BUZZER
         tone(BUZZER_PIN, ATTENTION_FREQUENCY);
+#endif
       }
     }
   }
