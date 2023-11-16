@@ -374,7 +374,9 @@ void loop() {
     }
   } else if (lastUiHeartbeat != 0 &&
              millis() - lastUiHeartbeat > UI_STALE_THRESHOLD_MILLIS) {
+#ifndef DISABLE_UI_TIMEOUT
     enterErrorState(ERROR_UI_TIMEOUT);
+#endif
   }
 
   // send status
