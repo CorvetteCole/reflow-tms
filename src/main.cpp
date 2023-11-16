@@ -10,10 +10,10 @@
 #include "status.h"
 #include "utils.cpp"
 #include <AVR_Slow_PWM.h>
-#include <Adafruit_MAX31865.h>
+#include <MAX31865_NonBlocking.h>
 
 // Don't change these numbers to make higher Timer freq. System can hang
-#define HW_TIMER_INTERVAL_FREQ 10000L
+#define HW_TIMER_INTERVAL_FREQ 1000L
 
 AVR_Slow_PWM heatingElementPwm;
 
@@ -22,6 +22,10 @@ Status status;
 float pidCurrentTemperature, pidTargetTemperature, pidTopHeatDutyCycle,
     pidBottomHeatDutyCycle;
 
+char receivedChars[INPUT_BUFFER_SIZE];
+bool newData = false; // represents whether the receivedChars array is ready to
+                      // be parsed
+
 QuickPID topHeatingElementPid(&pidCurrentTemperature, &pidTopHeatDutyCycle,
                               &pidTargetTemperature);
 
@@ -29,7 +33,7 @@ QuickPID bottomHeatingElementPid(&pidCurrentTemperature,
                                  &pidBottomHeatDutyCycle,
                                  &pidTargetTemperature);
 
-Adafruit_MAX31865 max31865 = Adafruit_MAX31865(CS_PIN, DI_PIN, DO_PIN, CLK_PIN);
+MAX31865 max31865(10);
 
 Logger logger = Logger(LogLevel::INFO);
 
@@ -40,9 +44,6 @@ void immediateStop() {
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
-  heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
-                                     HEATING_ELEMENT_PWM_FREQUENCY, 0);
-  //  heatingElementPwm.disableAll();
 
   status.topHeatDutyCycle = 0;
   status.bottomHeatDutyCycle = 0;
@@ -55,6 +56,7 @@ void sendStatus() {
 
 void enterErrorState(uint8_t error) {
   if (status.state != State::FAULT) {
+    tone(BUZZER_PIN, ALARM_FREQUENCY);
     immediateStop();
     status.state = State::FAULT;
   }
@@ -74,7 +76,6 @@ void setup() {
   }
 
   logger.info(F("Starting thermal management system..."));
-  //  logger.info(BOARD_NAME);
 
   logger.debug(F("Initializing ITimer1..."));
 
@@ -90,18 +91,13 @@ void setup() {
   }
 
   // initialize built-in LED pin as an output (will blink on heartbeat)
-  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
   pinMode(FAN_PIN, OUTPUT);
   pinMode(TOP_HEATING_ELEMENT_PIN, OUTPUT);
   pinMode(BOTTOM_HEATING_ELEMENT_PIN, OUTPUT);
 
   // initialize door sensor pin as an input
   pinMode(DOOR_PIN, INPUT_PULLUP);
-  pinMode(RESET_PIN, INPUT_PULLUP);
-
-  logger.debug(F("Attaching interrupts..."));
-
-  //  attachInterrupt(digitalPinToInterrupt(RESET_PIN), resetFunc, FALLING);
 
   logger.debug(F("Initializing PWM..."));
 
@@ -110,10 +106,6 @@ void setup() {
                            HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.setPWM(BOTTOM_HEATING_ELEMENT_PIN,
                            HEATING_ELEMENT_PWM_FREQUENCY, 0);
-  heatingElementPwm.setPWM(LED_BUILTIN, HEATING_ELEMENT_PWM_FREQUENCY, 0);
-
-  //  heatingElementPwm.disableAll(); // disable timers while we aren't using
-  //  them
 
   logger.debug(F("Initializing PID..."));
 
@@ -121,20 +113,20 @@ void setup() {
   topHeatingElementPid.SetSampleTimeUs(PID_INTERVAL_MICROS);
   topHeatingElementPid.SetTunings(
       TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI, TOP_HEATING_ELEMENT_KD);
-  topHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
-  topHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwCondition);
+  topHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnMeas);
+  topHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
 
   bottomHeatingElementPid.SetOutputLimits(0, 100);
   bottomHeatingElementPid.SetSampleTimeUs(PID_INTERVAL_MICROS);
   bottomHeatingElementPid.SetTunings(BOTTOM_HEATING_ELEMENT_KP,
                                      BOTTOM_HEATING_ELEMENT_KI,
                                      BOTTOM_HEATING_ELEMENT_KD);
-  bottomHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
-  bottomHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwCondition);
+  bottomHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnMeas);
+  bottomHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
 
   logger.debug(F("Initializing MAX31865_3WIRE..."));
 
-  max31865.begin(MAX31865_3WIRE);
+  max31865.begin(MAX31865::RTD_3WIRE, MAX31865::FILTER_60HZ);
 
   logger.info(F("Thermal management system started"));
 }
@@ -143,40 +135,42 @@ void setup() {
 /// Returns true if the temperature sensor reading was successful, false
 /// otherwise.
 void readTemperature() {
-  uint16_t rtd = max31865.readRTD();
-  float temperature = max31865.temperature(RNOMINAL, RREF);
-
-  if (logger.logLevel == LogLevel::DEBUG) {
-    // format strings and print debug
-    float ratio = rtd;
-    ratio /= 32768;
-
-    logger.debug((String("Resistance: ") + String(RREF * ratio, 8)).c_str());
+  static unsigned long lastTemperatureRead = 0;
+  if (!max31865.isConversionComplete()) {
+    // detect stale temperature readings
+    if (lastTemperatureRead != 0 &&
+        millis() - lastTemperatureRead > TEMPERATURE_STALE_THRESHOLD_MILLIS) {
+      enterErrorState(ERROR_CURRENT_TEMPERATURE_FAULT);
+    }
+    return;
   }
 
-  uint8_t fault = max31865.readFault();
+  float temperature = max31865.getTemperature(RNOMINAL, RREF);
+
+  uint8_t fault = max31865.getFault();
   if (fault) {
     enterErrorState(ERROR_CURRENT_TEMPERATURE_FAULT);
 
-    if (fault & MAX31865_FAULT_HIGHTHRESH) {
+    if (fault & MAX31865::FAULT_HIGHTHRESH_BIT) {
       logger.debug(F("RTD High Threshold"));
     }
-    if (fault & MAX31865_FAULT_LOWTHRESH) {
+    if (fault & MAX31865::FAULT_LOWTHRESH_BIT) {
       logger.debug(F("RTD Low Threshold"));
     }
-    if (fault & MAX31865_FAULT_REFINLOW) {
+    if (fault & MAX31865::FAULT_REFINLOW_BIT) {
       logger.debug(F("REFIN- > 0.85 x Bias"));
     }
-    if (fault & MAX31865_FAULT_REFINHIGH) {
+    if (fault & MAX31865::FAULT_REFINHIGH_BIT) {
       logger.debug(F("REFIN- < 0.85 x Bias - FORCE- open"));
     }
-    if (fault & MAX31865_FAULT_RTDINLOW) {
+    if (fault & MAX31865::FAULT_RTDINLOW_BIT) {
       logger.debug(F("RTDIN- < 0.85 x Bias - FORCE- open"));
     }
-    if (fault & MAX31865_FAULT_OVUV) {
+    if (fault & MAX31865::FAULT_OVUV_BIT) {
       logger.debug(F("Under/Over voltage"));
     }
-    delay(100);
+    max31865.clearFault();
+    delay(100); // wait for a bit so we aren't
   }
   status.currentTemperature = temperature;
 
@@ -187,6 +181,7 @@ void readTemperature() {
     // temperature is an unsigned int, so this is a sign that something is wrong
     enterErrorState(ERROR_CURRENT_TEMPERATURE_TOO_LOW);
   }
+  lastTemperatureRead = millis();
 }
 
 void computePid() {
@@ -199,7 +194,7 @@ void computePid() {
 
   // if we are past the PID interval, we should log a warning
   if (lastPidCompute != 0 &&
-      micros() - lastPidCompute > PID_INTERVAL_MICROS + 1000) {
+      micros() - lastPidCompute > PID_INTERVAL_MICROS + 1000) { // TODO do we need this +1000?
     logger.warn(F("PID loop interval too long!"));
   }
 
@@ -231,9 +226,6 @@ void computePid() {
   status.topHeatDutyCycle = static_cast<uint8_t>(pidTopHeatDutyCycle);
   status.bottomHeatDutyCycle = static_cast<uint8_t>(pidBottomHeatDutyCycle);
 }
-
-char receivedChars[INPUT_BUFFER_SIZE];
-bool newData = false;
 
 bool receiveCommand() {
   static bool receiveInProgress = false;
@@ -270,19 +262,16 @@ bool receiveCommand() {
   return false;
 }
 
-uint8_t lastTopHeatDutyCycle = 0;
-uint8_t lastBottomHeatDutyCycle = 0;
-uint32_t lastUiHeartbeat = 0;
-uint32_t lastSentStatus = 0;
-
-// TODO:
-// - figure out why erroring doesn't actually set the output to off every time
-// (!!)
-// - figure out the funkiness with the pid loop integral which seems to get
-// weird if you go between idle and heating states many times
-
+// TODO: detect current temperature not rising during heating
 void loop() {
+  static uint8_t lastTopHeatDutyCycle = 0;
+  static uint8_t lastBottomHeatDutyCycle = 0;
+  static unsigned long lastUiHeartbeat = 0;
+  static unsigned long lastSentStatus = 0;
+  static unsigned long loopTime = 0;
   static StaticJsonDocument<32> commandJson;
+
+  loopTime = micros();
 
   status.isDoorOpen = !digitalRead(DOOR_PIN);
   if (status.state == State::HEATING && status.isDoorOpen) {
@@ -378,7 +367,7 @@ void loop() {
       newData = false;
     }
   } else if (lastUiHeartbeat != 0 && millis() - lastUiHeartbeat > UI_TIMEOUT) {
-    //    enterErrorState(ERROR_UI_TIMEOUT); //TODO
+//        enterErrorState(ERROR_UI_TIMEOUT); //TODO
   }
 
   // send status
@@ -393,7 +382,7 @@ void loop() {
     if (status.topHeatDutyCycle != 0 || status.bottomHeatDutyCycle != 0) {
       logger.warn("Heating elements should be off already! Turning off now...");
       immediateStop();
-      delay(500);
+      delay(50);
     }
     return;
   }
@@ -434,12 +423,17 @@ void loop() {
     if (status.state == State::HEATING) {
       // only compute when we need it - we're heating
       computePid();
+    } else if (status.state == State::COOLING) {
+      if (status.isDoorOpen){
+        noTone(BUZZER_PIN);
+      } else {
+        tone(BUZZER_PIN, ATTENTION_FREQUENCY);
+      }
     }
   }
 
   if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
       status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {
-    //    logger.debug(F("Updating PWM"));
     // set PWM
     heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
                                        HEATING_ELEMENT_PWM_FREQUENCY,
@@ -447,10 +441,14 @@ void loop() {
     heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
                                        HEATING_ELEMENT_PWM_FREQUENCY,
                                        status.bottomHeatDutyCycle);
-    heatingElementPwm.modifyPWMChannel(2, LED_BUILTIN,
-                                       HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.bottomHeatDutyCycle);
     lastTopHeatDutyCycle = status.topHeatDutyCycle;
     lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
+  }
+
+  loopTime = micros() - loopTime;
+  if (loopTime > LOOP_SLOW_THRESHOLD_MICROS) {
+    logger.warn(
+        (String("Loop time >5000us: ") + String(loopTime) + String("us"))
+            .c_str());
   }
 }
