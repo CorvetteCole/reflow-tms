@@ -56,9 +56,13 @@ void sendStatus() {
 
 void enterErrorState(uint8_t error) {
   if (status.state != State::FAULT) {
+#ifndef DISABLE_FAULT_HANDLING
+#ifndef DISABLE_BUZZER
     tone(BUZZER_PIN, ALARM_FREQUENCY);
+#endif
     immediateStop();
     status.state = State::FAULT;
+#endif
   }
   if (!(status.error & error)) {
     // this is a new error!
@@ -194,7 +198,8 @@ void computePid() {
 
   // if we are past the PID interval, we should log a warning
   if (lastPidCompute != 0 &&
-      micros() - lastPidCompute > PID_INTERVAL_MICROS + 1000) { // TODO do we need this +1000?
+      micros() - lastPidCompute >
+          PID_INTERVAL_MICROS + 1000) { // TODO do we need this +1000?
     logger.warn(F("PID loop interval too long!"));
   }
 
@@ -366,19 +371,19 @@ void loop() {
 
       newData = false;
     }
-  } else if (lastUiHeartbeat != 0 && millis() - lastUiHeartbeat > UI_TIMEOUT) {
-//        enterErrorState(ERROR_UI_TIMEOUT); //TODO
+  } else if (lastUiHeartbeat != 0 &&
+             millis() - lastUiHeartbeat > UI_STALE_THRESHOLD_MILLIS) {
+    enterErrorState(ERROR_UI_TIMEOUT);
   }
 
   // send status
-  if (millis() - lastSentStatus > STATUS_SEND_INTERVAL) {
+  if (millis() - lastSentStatus > STATUS_INTERVAL_MILLIS) {
     sendStatus();
     lastSentStatus = millis();
   }
 
   if (status.state == State::FAULT) {
-    //    logger.debug(F("In error state, not controlling heating elements"));
-    // make sure HEATING elements are off
+    // make sure heating elements are off
     if (status.topHeatDutyCycle != 0 || status.bottomHeatDutyCycle != 0) {
       logger.warn("Heating elements should be off already! Turning off now...");
       immediateStop();
@@ -424,7 +429,7 @@ void loop() {
       // only compute when we need it - we're heating
       computePid();
     } else if (status.state == State::COOLING) {
-      if (status.isDoorOpen){
+      if (status.isDoorOpen) {
         noTone(BUZZER_PIN);
       } else {
         tone(BUZZER_PIN, ATTENTION_FREQUENCY);
@@ -435,12 +440,14 @@ void loop() {
   if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
       status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {
     // set PWM
+#ifndef DISABLE_HEATING
     heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
                                        HEATING_ELEMENT_PWM_FREQUENCY,
                                        status.topHeatDutyCycle);
     heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
                                        HEATING_ELEMENT_PWM_FREQUENCY,
                                        status.bottomHeatDutyCycle);
+#endif
     lastTopHeatDutyCycle = status.topHeatDutyCycle;
     lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
   }

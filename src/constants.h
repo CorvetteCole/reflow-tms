@@ -1,6 +1,12 @@
 #ifndef REFLOW_TMS_CONSTANTS_H
 #define REFLOW_TMS_CONSTANTS_H
 
+// ######### DEBUG FLAGS #########
+#define DISABLE_FAULT_HANDLING
+#define DISABLE_HEATING
+#define DISABLE_BUZZER
+// ###############################
+
 #define HEATING_ELEMENT_PWM_FREQUENCY 1.0f
 #define MAX_TARGET_TEMPERATURE 300
 #define MIN_TARGET_TEMPERATURE 30
@@ -23,7 +29,7 @@
 
 #define INPUT_BUFFER_SIZE 32
 
-#define ALARM_FREQUENCY 4000 // Hz
+#define ALARM_FREQUENCY 4000     // Hz
 #define ATTENTION_FREQUENCY 1000 // Hz
 
 // The value of the Rref resistor. Use 430.0 for PT100 and 4300.0 for PT1000
@@ -32,12 +38,12 @@
 // 100.0 for PT100, 1000.0 for PT1000
 #define RNOMINAL 100.0
 
-#define UI_TIMEOUT 1000          // in milliseconds
-#define STATUS_SEND_INTERVAL 1000 // ms
-
-#define PID_INTERVAL_MICROS 100000      // 100ms
-#define LOOP_SLOW_THRESHOLD_MICROS 5000 // 5ms
+#define UI_STALE_THRESHOLD_MILLIS 1000
 #define TEMPERATURE_STALE_THRESHOLD_MILLIS 250
+#define LOOP_SLOW_THRESHOLD_MICROS 5000 // 5ms
+
+#define STATUS_INTERVAL_MILLIS 500 // ms
+#define PID_INTERVAL_MICROS 100000 // 100ms
 
 // binary error codes (can be combined)
 #define ERROR_DOOR_OPENED_DURING_HEATING 0x01
