@@ -295,8 +295,9 @@ void loop() {
 
     // Test if parsing succeeds.
     if (error) {
-      logger.warn(F("Could not parse command"));
-      logger.warn(error.c_str());
+      logger.warn((String("Could not parse command: ") + String(error.c_str()) +
+                   String(", '") + String(receivedChars) + String("'"))
+                      .c_str());
     } else {
       bool commandPresent = false;
 
@@ -369,9 +370,8 @@ void loop() {
         serializeJson(commandJson, Serial);
         Serial.println();
       }
-
-      newData = false;
     }
+    newData = false;
   } else if (lastUiHeartbeat != 0 &&
              millis() - lastUiHeartbeat > UI_STALE_THRESHOLD_MILLIS) {
 #ifndef DISABLE_UI_TIMEOUT
