@@ -285,11 +285,11 @@ void loop() {
   //  logger.debug(F("Reading temperature"));
   readTemperature();
 
-  if (status.targetTemperature > FAN_ON_TEMPERATURE && !isFanOn) {
+  if (status.currentTemperature > FAN_ON_TEMPERATURE && !isFanOn) {
     logger.info(F("Turning on fan"));
     digitalWrite(FAN_PIN, HIGH);
     isFanOn = true;
-  } else if (status.targetTemperature < FAN_ON_TEMPERATURE && isFanOn) {
+  } else if (status.currentTemperature < FAN_ON_TEMPERATURE && isFanOn) {
     logger.info(F("Turning off fan"));
     digitalWrite(FAN_PIN, LOW);
     isFanOn = false;
