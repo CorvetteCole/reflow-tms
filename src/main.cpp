@@ -76,8 +76,6 @@ void (*resetFunc)() = nullptr;
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial && !Serial.available()) {
-  }
 
   logger.info(F("Starting thermal management system..."));
 
