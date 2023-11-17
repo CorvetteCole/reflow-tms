@@ -117,7 +117,7 @@ void setup() {
   topHeatingElementPid.SetSampleTimeUs(PID_INTERVAL_MICROS);
   topHeatingElementPid.SetTunings(
       TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI, TOP_HEATING_ELEMENT_KD);
-  topHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnMeas);
+  topHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
   topHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
 
   bottomHeatingElementPid.SetOutputLimits(0, 100);
@@ -125,7 +125,7 @@ void setup() {
   bottomHeatingElementPid.SetTunings(BOTTOM_HEATING_ELEMENT_KP,
                                      BOTTOM_HEATING_ELEMENT_KI,
                                      BOTTOM_HEATING_ELEMENT_KD);
-  bottomHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnMeas);
+  bottomHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
   bottomHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
 
   logger.debug(F("Initializing MAX31865_3WIRE..."));
