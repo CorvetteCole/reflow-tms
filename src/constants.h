@@ -46,7 +46,7 @@
 #define STATUS_INTERVAL_MILLIS 500 // ms
 #define PID_INTERVAL_MICROS 100000 // 100ms
 
-#define FAN_ON_TEMPERATURE 40 // degrees Celsius
+#define FAN_ON_TEMPERATURE 40.0f // degrees Celsius
 
 // binary error codes (can be combined)
 #define ERROR_DOOR_OPENED_DURING_HEATING 0x01
