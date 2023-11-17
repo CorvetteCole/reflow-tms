@@ -415,9 +415,9 @@ void loop() {
         status.currentTemperature - status.targetTemperature > 20) {
       logger.info(F("Started cooling"));
       topHeatingElementPid.SetMode(QuickPID::Control::manual);
-      topHeatingElementPid.Reset();
       bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
-      bottomHeatingElementPid.Reset();
+      status.topHeatDutyCycle = 0;
+      status.bottomHeatDutyCycle = 0;
       status.state = State::COOLING;
     } else if (status.state != State::HEATING &&
                status.targetTemperature > status.currentTemperature) {
