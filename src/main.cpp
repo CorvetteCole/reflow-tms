@@ -275,6 +275,7 @@ void loop() {
   static unsigned long lastUiHeartbeat = 0;
   static unsigned long lastSentStatus = 0;
   static unsigned long loopTime = 0;
+  static bool isFanOn = false;
   static StaticJsonDocument<32> commandJson;
 
   loopTime = micros();
@@ -285,6 +286,14 @@ void loop() {
   }
   //  logger.debug(F("Reading temperature"));
   readTemperature();
+
+  if (status.targetTemperature > FAN_ON_TEMPERATURE && !isFanOn) {
+    digitalWrite(FAN_PIN, HIGH);
+    isFanOn = true;
+  } else if (isFanOn) {
+    digitalWrite(FAN_PIN, LOW);
+    isFanOn = false;
+  }
 
   //  logger.debug(F("Reading command"));
   if (receiveCommand()) {
@@ -407,7 +416,6 @@ void loop() {
       bottomHeatingElementPid.Reset();
       status.topHeatDutyCycle = 0;
       status.bottomHeatDutyCycle = 0;
-      digitalWrite(FAN_PIN, LOW);
     }
   } else {
     if (status.state != State::COOLING &&
@@ -423,7 +431,6 @@ void loop() {
                status.targetTemperature > status.currentTemperature) {
       logger.info(F("Started heating"));
       status.state = State::HEATING;
-      digitalWrite(FAN_PIN, HIGH);
       topHeatingElementPid.SetMode(QuickPID::Control::timer);
       bottomHeatingElementPid.SetMode(QuickPID::Control::timer);
     }
