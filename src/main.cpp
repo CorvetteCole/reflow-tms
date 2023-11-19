@@ -273,6 +273,7 @@ void loop() {
   static unsigned long lastUiHeartbeat = 0;
   static unsigned long lastSentStatus = 0;
   static unsigned long loopTime = 0;
+  static unsigned long lastFanToggle = 0;
   static bool isFanOn = false;
   static StaticJsonDocument<32> commandJson;
 
@@ -285,14 +286,18 @@ void loop() {
   //  logger.debug(F("Reading temperature"));
   readTemperature();
 
-  if (status.currentTemperature > FAN_ON_TEMPERATURE && !isFanOn) {
+  if (status.currentTemperature > FAN_ON_TEMPERATURE && !isFanOn &&
+      millis() - lastFanToggle > FAN_DEBOUNCE_THRESHOLD_MILLIS) {
     logger.info(F("Turning on fan"));
     digitalWrite(FAN_PIN, HIGH);
     isFanOn = true;
-  } else if (status.currentTemperature < FAN_ON_TEMPERATURE && isFanOn) {
+    lastFanToggle = millis();
+  } else if (status.currentTemperature < FAN_ON_TEMPERATURE && isFanOn &&
+             millis() - lastFanToggle > FAN_DEBOUNCE_THRESHOLD_MILLIS) {
     logger.info(F("Turning off fan"));
     digitalWrite(FAN_PIN, LOW);
     isFanOn = false;
+    lastFanToggle = millis();
   }
 
   //  logger.debug(F("Reading command"));
