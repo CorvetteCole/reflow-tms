@@ -130,6 +130,14 @@ void setup() {
 
   max31865.begin(MAX31865::RTD_3WIRE, MAX31865::FILTER_60HZ);
 
+  status.state = State::IDLE;
+  topHeatingElementPid.SetMode(QuickPID::Control::manual);
+  topHeatingElementPid.Reset();
+  bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
+  bottomHeatingElementPid.Reset();
+  status.topHeatDutyCycle = 0;
+  status.bottomHeatDutyCycle = 0;
+
   logger.info(F("Thermal management system started"));
 }
 
@@ -264,6 +272,86 @@ bool receiveCommand() {
   }
   return false;
 }
+
+
+
+
+// generate step response at power levels 10, 20, 40, 80, 100
+// basically, set the duty cycles of top and bottom heating elements to the
+// power level we are getting a step response for. The basic idea for this is
+// the following:
+// 1. if the current step response hasn't started yet, record the current
+//    and wait for it to "stabilize" (i.e. over the last 1 second it doesn't
+//    change TOO much.
+// 2. Record this stable reference temperature and set the power level to the
+//    current step response index. Set currentStepResponseStarted to true.
+// 3. Wait 60 seconds, or until temperature reaches safety limit of 250. Then
+//    set currentStepResponseStarted to false, and iterate the current step
+//    response index.
+int currentStepResponseIndex = 0;
+bool currentStepResponseStarted = false;
+const int numberOfSteps = 5;
+const int powerLevels[numberOfSteps] = {100, 80, 40, 20, 10};
+const unsigned long stabilizationPeriodMilliseconds = 30000;
+const unsigned long stepDurationMilliseconds = 60000;
+const float safetyTemperatureLimit = 250.0f;
+
+// Variables for stabilizing temperature tracking
+unsigned long responseStartTime;
+unsigned long stabilizingStartTime;
+float stableReferenceTemperature;
+float lastTemperatureRead;
+bool temperatureStabilized;
+
+void generateStepResponse() {
+  if (currentStepResponseIndex >= numberOfSteps) {
+    // All steps have been completed
+    status.topHeatDutyCycle = 0;
+    status.bottomHeatDutyCycle = 0;
+    status.state = State::IDLE;
+    return;
+  }
+
+  unsigned long currentTime = millis();
+
+  // If the step response hasn't started, begin the stabilization period
+  if (!currentStepResponseStarted) {
+    responseStartTime = currentTime;
+    stabilizingStartTime = currentTime;
+    stableReferenceTemperature = status.currentTemperature;
+    lastTemperatureRead = stableReferenceTemperature;
+    temperatureStabilized = false;
+    logger.info((String("Starting step response for power level ") + String(powerLevels[currentStepResponseIndex]) + String("%")).c_str());
+    currentStepResponseStarted = true;
+  } else {
+    // Check if temperature has stabilized by comparing against last read
+    if (abs(status.currentTemperature - lastTemperatureRead) < THRESHOLD_TEMPERATURE_CHANGE_FOR_STABILITY &&
+        currentTime - stabilizingStartTime > stabilizationPeriodMilliseconds) {
+      temperatureStabilized = true;
+    }
+
+    lastTemperatureRead = status.currentTemperature;
+
+    if (temperatureStabilized) {
+      // Stabilization period over, set the power levels
+      status.topHeatDutyCycle = powerLevels[currentStepResponseIndex];
+      status.bottomHeatDutyCycle = powerLevels[currentStepResponseIndex];
+      status.state = State::HEATING;
+    }
+
+    // Check if we've completed the step duration or if temperature exceeded safety limit
+    if (currentTime - responseStartTime >= stepDurationMilliseconds ||
+        status.currentTemperature > safetyTemperatureLimit) {
+      // Finish step, prepare for next step
+      status.topHeatDutyCycle = 0;
+      status.bottomHeatDutyCycle = 0;
+      currentStepResponseIndex++;
+      currentStepResponseStarted = false;
+      status.state = State::COOLING;
+    }
+  }
+}
+
 
 // TODO: detect current temperature not rising during heating
 // TODO: implement CRC16 checksums for commands
@@ -409,50 +497,7 @@ void loop() {
     return;
   }
 
-  if (status.targetTemperature == 0) {
-    if (status.state != State::IDLE) {
-      logger.debug(
-          F("Target temperature is 0, resetting PID loop and disabling "
-            "heating elements"));
-      status.state = State::IDLE;
-      topHeatingElementPid.SetMode(QuickPID::Control::manual);
-      topHeatingElementPid.Reset();
-      bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
-      bottomHeatingElementPid.Reset();
-      status.topHeatDutyCycle = 0;
-      status.bottomHeatDutyCycle = 0;
-    }
-  } else {
-    if (status.state != State::COOLING &&
-        status.currentTemperature > status.targetTemperature &&
-        status.currentTemperature - status.targetTemperature > 20) {
-      logger.info(F("Started cooling"));
-      topHeatingElementPid.SetMode(QuickPID::Control::manual);
-      bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
-      status.topHeatDutyCycle = 0;
-      status.bottomHeatDutyCycle = 0;
-      status.state = State::COOLING;
-    } else if (status.state != State::HEATING &&
-               status.targetTemperature > status.currentTemperature) {
-      logger.info(F("Started heating"));
-      status.state = State::HEATING;
-      topHeatingElementPid.SetMode(QuickPID::Control::timer);
-      bottomHeatingElementPid.SetMode(QuickPID::Control::timer);
-    }
-
-    if (status.state == State::HEATING) {
-      // only compute when we need it - we're heating
-      computePid();
-    } else if (status.state == State::COOLING) {
-      if (status.isDoorOpen) {
-        noTone(BUZZER_PIN);
-      } else {
-#ifndef DISABLE_BUZZER
-        tone(BUZZER_PIN, ATTENTION_FREQUENCY);
-#endif
-      }
-    }
-  }
+  generateStepResponse();
 
   if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
       status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {

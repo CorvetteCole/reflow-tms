@@ -4,7 +4,7 @@
 // ######### DEBUG FLAGS #########
 //#define DISABLE_FAULT_HANDLING
 //#define DISABLE_HEATING
-//#define DISABLE_BUZZER
+#define DISABLE_BUZZER
 #define DISABLE_UI_TIMEOUT
 // ###############################
 
@@ -44,10 +44,12 @@
 #define LOOP_SLOW_THRESHOLD_MICROS 5000 // 5ms
 #define FAN_DEBOUNCE_THRESHOLD_MILLIS 30000
 
-#define STATUS_INTERVAL_MILLIS 500 // ms
+#define STATUS_INTERVAL_MILLIS 250 // ms
 #define PID_INTERVAL_MICROS 100000 // 100ms
 
 #define FAN_ON_TEMPERATURE 35.0f // degrees Celsius
+
+#define THRESHOLD_TEMPERATURE_CHANGE_FOR_STABILITY 0.5f // degrees Celsius
 
 // binary error codes (can be combined)
 #define ERROR_DOOR_OPENED_DURING_HEATING 0x01
