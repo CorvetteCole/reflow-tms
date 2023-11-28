@@ -5,10 +5,10 @@ pwm_bounds = (0, 100)  # pwm outputs
 temperature_bounds = (20, 270)  # temperatures MPC controller is expected to stay between
 
 # Given system parameters
-k = 4.2266348441803645
-ω = 0.005328475532226316
-ξ = 1.2586207495932575
-theta = 10  # Delay time in seconds
+k = 4.7875771211019
+ω = 0.0027731675792143345
+ξ = 1.54264888649055
+theta = 22.912482438708693  # Delay time in seconds
 
 # Convert to discrete-time state-space representation
 # Since the sampling time isn't defined, we assume Ts such that steps_delay is an integer
@@ -35,10 +35,9 @@ B_aug = np.zeros((A_d.shape[0] + steps_delay, B_d.shape[1]))
 B_aug[:B_d.shape[0], :B_d.shape[1]] = B_d
 B_aug[A_d.shape[0], 0] = 1  # First fake state gets the input
 
-
 # Higher weight on the first state, lower on the delay states
-Q_aug = np.diag([10] + [1]*(A_d.shape[0] - 1) + [0.1]*steps_delay)
-R_aug = np.eye(1)
+Q_aug = np.diag([10] + [1] * (A_d.shape[0] - 1) + [0.1] * steps_delay)
+R_aug = np.array([[1]])
 # Penalty on control usage
 # R_aug = np.array([[10]])
 
