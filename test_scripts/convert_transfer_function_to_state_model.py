@@ -18,7 +18,8 @@ A = np.array([[0, 1], [-ω * ω, -2 * ξ * ω]])
 B = np.array([[0], [k * ω * ω]])  # state space equation B
 
 # Cost function
-Q = np.array([[1, 0], [0, 3]])  # cost function Q, which determines the convergence rate of the state
+#Q = np.array([[1, 0], [0, 3]])  # cost function Q, which determines the convergence rate of the state
+Q = np.diag([1] + [1] * (A.shape[0] - 1))
 R = np.array([[1]])  # cost function R, which determines the convergence rate of the input
 
 # Constraints
@@ -30,9 +31,9 @@ b_u = np.array([pwm_bounds[1], pwm_bounds[0]])  # Bounds for the input (0 to 100
 
 mpc = lMf.LinearMPCFactor(A, B, Q, R, N, A_x, b_x, A_u, b_u)  # print the
 # Tolerances and maximum iterations
-e_V = 0.001  # tolerance of the error between optimal cost and real cost
-e_g = 0.001  # tolerance of the violation of constraints
-max_iter = 10  # maximum steps of the solver
+e_V = 0.1  # tolerance of the error between optimal cost and real cost
+e_g = 0.1  # tolerance of the violation of constraints
+max_iter = 1  # maximum steps of the solver
 
 mpc.PrintCppCode(e_V, e_g, max_iter)
 
