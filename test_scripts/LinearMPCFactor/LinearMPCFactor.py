@@ -2,6 +2,7 @@ import numpy as np
 import numpy.linalg as npl
 import scipy.linalg as spl
 import scipy.optimize as spo
+from tqdm import tqdm
 
 
 class LinearMPCFactor:
@@ -44,6 +45,7 @@ class LinearMPCFactor:
         t = 0
         ACons, bCons = Ad, bd  # 初始状态
         Ak = self.A - self.B @ self.K
+        progress = tqdm(desc="Calculating terminal set")
 
         while True:
             max_res = []
@@ -57,12 +59,15 @@ class LinearMPCFactor:
 
             if ((np.array(max_res) - bd) <= 0).all():
                 break  # 若相等则跳出循环
+            else:
+                progress.write(f"t = {t}, max_res - bd = {np.array(max_res) - bd}")
 
             t = t + 1
 
             ACons = np.vstack((ACons, Ad @ npl.matrix_power(Ak, t)))
             bCons = np.hstack((bCons, bd))
             # 若不是则令Ot = Ot+1继续循环
+            progress.update()
 
         ACons, bCons = self.rmCollinear(ACons, bCons)
         ACons, bCons = self.rmRedundant(ACons, bCons)  # 得到结果后还需除去冗余项
