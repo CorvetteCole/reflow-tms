@@ -5,7 +5,7 @@
 //#define DISABLE_FAULT_HANDLING
 //#define DISABLE_HEATING
 //#define DISABLE_BUZZER
-#define DISABLE_UI_TIMEOUT
+//#define DISABLE_UI_TIMEOUT
 // ###############################
 
 #define HEATING_ELEMENT_PWM_FREQUENCY 1.0f
@@ -44,7 +44,7 @@
 #define LOOP_SLOW_THRESHOLD_MICROS 5000 // 5ms
 #define FAN_DEBOUNCE_THRESHOLD_MILLIS 30000
 
-#define STATUS_INTERVAL_MILLIS 500 // ms
+#define STATUS_INTERVAL_MILLIS 250 // ms
 #define PID_INTERVAL_MICROS 100000 // 100ms
 
 #define FAN_ON_TEMPERATURE 35.0f // degrees Celsius
