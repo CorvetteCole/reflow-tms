@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.signal import cont2discrete
 import LinearMPCFactor as lMf
+import control
 
 pwm_bounds = (0, 100)  # pwm outputs
 temperature_bounds = (20, 270)  # temperatures MPC controller is expected to stay between
@@ -11,31 +12,73 @@ k = 4.7875771211019
 ξ = 1.54264888649055
 theta = 22.912482438708693  # Delay time in seconds
 
-N = 20  # Prediction horizon
+# Sampling time
+Ts = 0.1  # Choose a sampling time appropriate for your system
 
-# State-space model
-A = np.array([[0, 1], [-ω * ω, -2 * ξ * ω]])
-B = np.array([[0], [k * ω * ω]])  # state space equation B
+num = [0, 0, k * ω ** 2]
+den = [1, 2 * ξ * ω, ω ** 2]  # Coefficients for the denominator (poles)
 
-# Cost function
-#Q = np.array([[1, 0], [0, 3]])  # cost function Q, which determines the convergence rate of the state
-Q = np.diag([1] + [1] * (A.shape[0] - 1))
-R = np.array([[1]])  # cost function R, which determines the convergence rate of the input
+sys_tf = control.TransferFunction(num, den)
 
-# Constraints
+# convert to state-space
+sys_ss = control.tf2ss(sys_tf)
+
+# Discretize the state-space system
+sys_ss_d = sys_ss.sample(Ts, method='zoh')
+A_d = sys_ss_d.A
+B_d = sys_ss_d.B
+
+Q = np.eye(A_d.shape[0])  # cost function Q, which determines the convergence rate of the state
+R = np.eye(B_d.shape[1])  # cost function R, which determines the convergence rate of the input
+
+# State constraint matrices
 A_x = np.array([[1, 0], [-1, 0]])  # state constraints A_x @ x_k <= b_x
 b_x = np.array([temperature_bounds[1], -temperature_bounds[0]])
 
+# Input constraint matrices
 A_u = np.array([[1], [-1]])  # input constraints A_u @ u_k <= b_u
 b_u = np.array([pwm_bounds[1], pwm_bounds[0]])  # Bounds for the input (0 to 100)
 
-mpc = lMf.LinearMPCFactor(A, B, Q, R, N, A_x, b_x, A_u, b_u)  # print the
+N = 5  # Prediction horizon
+
+mpc = lMf.LinearMPCFactor(A_d, B_d, Q, R, N, A_x, b_x, A_u, b_u)  # print the
+
 # Tolerances and maximum iterations
-e_V = 0.1  # tolerance of the error between optimal cost and real cost
-e_g = 0.1  # tolerance of the violation of constraints
-max_iter = 1  # maximum steps of the solver
+e_V = 0.001  # tolerance of the error between optimal cost and real cost
+e_g = 0.001  # tolerance of the violation of constraints
+
+max_iter = 1000  # maximum steps of the solver
 
 mpc.PrintCppCode(e_V, e_g, max_iter)
+
+#######
+
+
+# N = 20  # Prediction horizon
+#
+# # State-space model
+# A = np.array([[0, 1], [-ω * ω, -2 * ξ * ω]])
+# B = np.array([[0], [k * ω * ω]])  # state space equation B
+#
+# # Cost function
+# #Q = np.array([[1, 0], [0, 3]])  # cost function Q, which determines the convergence rate of the state
+# Q = np.diag([1] + [1] * (A.shape[0] - 1))
+# R = np.array([[1]])  # cost function R, which determines the convergence rate of the input
+#
+# # Constraints
+# A_x = np.array([[1, 0], [-1, 0]])  # state constraints A_x @ x_k <= b_x
+# b_x = np.array([temperature_bounds[1], -temperature_bounds[0]])
+#
+# A_u = np.array([[1], [-1]])  # input constraints A_u @ u_k <= b_u
+# b_u = np.array([pwm_bounds[1], pwm_bounds[0]])  # Bounds for the input (0 to 100)
+#
+# mpc = lMf.LinearMPCFactor(A, B, Q, R, N, A_x, b_x, A_u, b_u)  # print the
+# # Tolerances and maximum iterations
+# e_V = 0.1  # tolerance of the error between optimal cost and real cost
+# e_g = 0.1  # tolerance of the violation of constraints
+# max_iter = 1  # maximum steps of the solver
+#
+# mpc.PrintCppCode(e_V, e_g, max_iter)
 
 
 ##############3
@@ -82,11 +125,7 @@ mpc.PrintCppCode(e_V, e_g, max_iter)
 # b_x_aug = np.array([temperature_bounds[1], -temperature_bounds[0]])  # Bounds for the state/output (20 to 250)
 
 
-
 ##################333
-
-
-
 
 
 #
