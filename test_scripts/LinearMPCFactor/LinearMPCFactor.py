@@ -50,12 +50,17 @@ class LinearMPCFactor:
         while True:
             max_res = []
 
-            for i in range(0, Ad.shape[0]):
-                c = Ad[i, :] @ np.linalg.matrix_power(Ak, t + 1)
-                bounds = [(None, None)] * Ad.shape[1]
-                res = spo.linprog(-c, A_ub=ACons, b_ub=bCons, bounds=bounds, method='revised simplex')
-                max_res.append(-res.fun)
-            # 检验Ot+1是否与Ot相等
+            try:
+                for i in range(0, Ad.shape[0]):
+                    c = Ad[i, :] @ np.linalg.matrix_power(Ak, t + 1)
+                    bounds = [(None, None)] * Ad.shape[1]
+
+                    res = spo.linprog(-c, A_ub=ACons, b_ub=bCons, bounds=bounds, method='revised simplex')
+
+                    max_res.append(-res.fun)
+                # 检验Ot+1是否与Ot相等
+            except KeyboardInterrupt:
+                break
 
             if ((np.array(max_res) - bd) <= 0).all():
                 break  # 若相等则跳出循环
@@ -97,7 +102,7 @@ class LinearMPCFactor:
     @staticmethod
     def rmRedundant(a: np.ndarray, b: np.ndarray):
         delete_line = []
-        for i in range(0, a.shape[0]):
+        for i in tqdm(range(0, a.shape[0]), desc="Removing redundant constraints"):
             c = a[i, :]
             a_bar = np.delete(a, i, 0)
             b_bar = np.delete(b, i)
@@ -108,6 +113,7 @@ class LinearMPCFactor:
             if 0.0001 > res.fun - res_bar.fun > -0.0001:
                 delete_line.append(i)
             # 有它没它都一样的话，说明该项冗余
+
 
         new_a = np.delete(a, delete_line, 0)
         new_b = np.delete(b, delete_line)
@@ -133,7 +139,8 @@ class LinearMPCFactor:
             M[self.Q.shape[0] * i:
               self.Q.shape[0] * (i + 1),
             self.Q.shape[1] * self.N + self.QN.shape[1] + self.R.shape[1] * i:
-            self.Q.shape[1] * self.N + self.QN.shape[1] + self.R.shape[1] * (i + 1)] = np.zeros((self.R.shape[0], self.Q.shape[1])).T
+            self.Q.shape[1] * self.N + self.QN.shape[1] + self.R.shape[1] * (i + 1)] = np.zeros(
+                (self.R.shape[0], self.Q.shape[1])).T
 
         M[self.Q.shape[0] * self.N:self.Q.shape[0] * self.N + self.QN.shape[0],
         self.Q.shape[1] * self.N:self.Q.shape[1] * self.N + self.QN.shape[1]] = self.QN

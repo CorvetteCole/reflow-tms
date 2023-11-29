@@ -4,7 +4,7 @@ import LinearMPCFactor as lMf
 import control
 
 pwm_bounds = (0, 100)  # pwm outputs
-temperature_bounds = (20, 270)  # temperatures MPC controller is expected to stay between
+temperature_bounds = (-20, 270)  # temperatures MPC controller is expected to stay between
 
 # Given system parameters
 k = 4.7875771211019
@@ -39,7 +39,7 @@ b_x = np.array([temperature_bounds[1], -temperature_bounds[0]])
 A_u = np.array([[1], [-1]])  # input constraints A_u @ u_k <= b_u
 b_u = np.array([pwm_bounds[1], pwm_bounds[0]])  # Bounds for the input (0 to 100)
 
-N = 5  # Prediction horizon
+N = 100  # Prediction horizon
 
 mpc = lMf.LinearMPCFactor(A_d, B_d, Q, R, N, A_x, b_x, A_u, b_u)  # print the
 
