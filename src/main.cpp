@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <QuickPID.h>
+#define MAXSIZE 20
+#include <MPC.h>
 #define USE_TIMER_1 true
 #define USING_MICROS_RESOLUTION true
 
@@ -19,23 +20,44 @@ AVR_Slow_PWM heatingElementPwm;
 
 Status status;
 
-float pidCurrentTemperature, pidTargetTemperature, pidTopHeatDutyCycle,
-    pidBottomHeatDutyCycle;
-
 char receivedChars[INPUT_BUFFER_SIZE];
 bool newData = false; // represents whether the receivedChars array is ready to
                       // be parsed
 
-QuickPID topHeatingElementPid(&pidCurrentTemperature, &pidTopHeatDutyCycle,
-                              &pidTargetTemperature);
-
-QuickPID bottomHeatingElementPid(&pidCurrentTemperature,
-                                 &pidBottomHeatDutyCycle,
-                                 &pidTargetTemperature);
-
 MAX31865 max31865(10);
 
 Logger logger = Logger(LogLevel::INFO);
+
+MatDataType_t L_phi = 3.491353;
+MatDataType_t e_V = 0.001;
+MatDataType_t e_g = 0.001;
+uint32_t max_iter = 1000;
+uint32_t N = 100;
+
+MatDataType_t A_arr[4] = {0.999145, -1e-06, 0.099957, 1.0};
+MatDataType_t B_arr[2] = {0.099957, 0.004999};
+MatDataType_t Q_arr[4] = {1.0, 0.0, 0.0, 1.0};
+MatDataType_t R_arr[1] = {1.0};
+MatDataType_t QN_arr[4] = {17.771051, 10.012292, 10.012292, 17.835026};
+MatDataType_t F_arr[8] = {1.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+MatDataType_t G_arr[4] = {0.0, 0.0, 1.0, -1.0};
+MatDataType_t c_arr[4] = {270, 20, 100, 0};
+MatDataType_t FN_arr[4] = {-1.627747, -0.917459, 0.006926, 0.003858};
+MatDataType_t cN_arr[2] = {0.0, 0.0};
+
+Matrix A = Matrix(2, 2, A_arr);
+Matrix B = Matrix(2, 1, B_arr);
+Matrix Q = Matrix(2, 2, Q_arr);
+Matrix R = Matrix(1, 1, R_arr);
+Matrix QN = Matrix(2, 2, QN_arr);
+Matrix F = Matrix(4, 2, F_arr);
+Matrix G = Matrix(4, 1, G_arr);
+Matrix c = Matrix(4, 1, c_arr);
+Matrix FN = Matrix(2, 2, FN_arr);
+Matrix cN = Matrix(2, 1, cN_arr);
+
+MPCController mpc = MPCController(L_phi, e_V, e_g, max_iter, N, A, B, Q, R, QN,
+                                  F, G, c, FN, cN);
 
 void pwmTimerHandler() { heatingElementPwm.run(); }
 
@@ -85,11 +107,9 @@ void setup() {
 
   logger.debug(F("Attaching ITimer1 interrupt..."));
 
-  if (ITimer1.attachInterrupt(HW_TIMER_INTERVAL_FREQ, pwmTimerHandler)) {
-    logger.debug(F("Starting ITimer1 OK"));
-  } else {
+  if (!ITimer1.attachInterrupt(HW_TIMER_INTERVAL_FREQ, pwmTimerHandler)) {
     logger.error(
-        F("Can't set ITimer1 correctly. Select another freq. or timer"));
+        F("Can't start ITimer1"));
   }
 
   // initialize built-in LED pin as an output (will blink on heartbeat)
@@ -109,22 +129,7 @@ void setup() {
   heatingElementPwm.setPWM(BOTTOM_HEATING_ELEMENT_PIN,
                            HEATING_ELEMENT_PWM_FREQUENCY, 0);
 
-  logger.debug(F("Initializing PID..."));
-
-  topHeatingElementPid.SetOutputLimits(0, 100);
-  topHeatingElementPid.SetSampleTimeUs(PID_INTERVAL_MICROS);
-  topHeatingElementPid.SetTunings(
-      TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI, TOP_HEATING_ELEMENT_KD);
-  topHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
-  topHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
-
-  bottomHeatingElementPid.SetOutputLimits(0, 100);
-  bottomHeatingElementPid.SetSampleTimeUs(PID_INTERVAL_MICROS);
-  bottomHeatingElementPid.SetTunings(BOTTOM_HEATING_ELEMENT_KP,
-                                     BOTTOM_HEATING_ELEMENT_KI,
-                                     BOTTOM_HEATING_ELEMENT_KD);
-  bottomHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
-  bottomHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
+  logger.debug(F("Initializing MPC..."));
 
   logger.debug(F("Initializing MAX31865_3WIRE..."));
 
@@ -186,48 +191,48 @@ void readTemperature() {
   lastTemperatureRead = millis();
 }
 
-void computePid() {
-  static unsigned long lastPidCompute = 0;
+void computeMPC() {
+  static unsigned long lastCompute = 0;
+  static Matrix state = Matrix(1, 1);
+  static Matrix control = Matrix(1, 1);
 
   if (status.state != State::HEATING) {
     // only compute PID if we are heating, since it is expensive
     return;
   }
 
-  // if we are past the PID interval, we should log a warning
-  if (lastPidCompute != 0 &&
-      micros() - lastPidCompute >
-          PID_INTERVAL_MICROS + 1000) { // TODO do we need this +1000?
-    logger.warn(F("PID loop interval too long!"));
+  if (lastCompute != 0) {
+    // if we are past the control interval, we should log a warning
+    if (micros() - lastCompute >
+        MPC_INTERVAL_MICROS + 1000) { // TODO do we need this +1000?
+      logger.warn(F("Control loop interval too long!"));
+    } else if (micros() - lastCompute < MPC_INTERVAL_MICROS - 1000) {
+      // we need to compute at exactly the control interval. So just return if
+      // we are not there yet. If we are within 1ms of the control interval, we
+      // will compute anyway.
+      return;
+    }
   }
 
-  pidTargetTemperature = status.targetTemperature;
-  pidCurrentTemperature = status.currentTemperature;
+  state(0, 0) = status.currentTemperature;
+  control = mpc(state);
+  lastCompute = micros();
 
-  topHeatingElementPid.Compute();
-  bottomHeatingElementPid.Compute();
-  lastPidCompute = micros();
+  float heatDutyCycle = control(0, 0);
 
-  if (pidTopHeatDutyCycle > 100) {
-    logger.warn(F("PID top heat duty cycle > 100%!"));
-    pidTopHeatDutyCycle = 100;
-  } else if (pidTopHeatDutyCycle < 0) {
-    logger.warn(F("PID top heat duty cycle < 0%!"));
-    pidTopHeatDutyCycle = 0;
-  }
-
-  if (pidBottomHeatDutyCycle > 100) {
-    logger.warn(F("PID bottom heat duty cycle > 100%!"));
-    pidBottomHeatDutyCycle = 100;
-  } else if (pidBottomHeatDutyCycle < 0) {
-    logger.warn(F("PID bottom heat duty cycle < 0%!"));
-    pidBottomHeatDutyCycle = 0;
+  // clamp heat duty cycle to 0-100
+  if (heatDutyCycle > 100) {
+    logger.warn(F("MPC heat duty cycle > 100%!"));
+    heatDutyCycle = 100;
+  } else if (heatDutyCycle < 0) {
+    logger.warn(F("MPC heat duty cycle < 0%!"));
+    heatDutyCycle = 0;
   }
 
   // we can statically cast to uint8_t because the output limits are set
   // to 0-100
-  status.topHeatDutyCycle = static_cast<uint8_t>(pidTopHeatDutyCycle);
-  status.bottomHeatDutyCycle = static_cast<uint8_t>(pidBottomHeatDutyCycle);
+  status.topHeatDutyCycle = static_cast<uint8_t>(heatDutyCycle);
+  status.bottomHeatDutyCycle = static_cast<uint8_t>(heatDutyCycle);
 }
 
 bool receiveCommand() {
@@ -350,35 +355,6 @@ void loop() {
         resetFunc();
       }
 
-      if (commandJson["pid_tune"] != nullptr) {
-        float kp = commandJson["kp"];
-        float ki = commandJson["ki"];
-        float kd = commandJson["kd"];
-        if (commandJson["pid"] == "top") {
-          topHeatingElementPid.SetTunings(kp, ki, kd);
-        } else if (commandJson["pid"] == "bottom") {
-          bottomHeatingElementPid.SetTunings(kp, ki, kd);
-        } else if (commandJson["pid"] == "both") {
-          topHeatingElementPid.SetTunings(kp, ki, kd);
-          bottomHeatingElementPid.SetTunings(kp, ki, kd);
-        } else {
-          logger.warn(F("Invalid PID command"));
-        }
-      }
-
-      if (commandJson["pid_reset"] != nullptr) {
-        if (commandJson["reset_pid"] == "top") {
-          topHeatingElementPid.Reset();
-        } else if (commandJson["reset_pid"] == "bottom") {
-          bottomHeatingElementPid.Reset();
-        } else if (commandJson["reset_pid"] == "both") {
-          topHeatingElementPid.Reset();
-          bottomHeatingElementPid.Reset();
-        } else {
-          logger.warn(F("Invalid PID reset command"));
-        }
-      }
-
       if (!commandPresent) {
         logger.warn(F("No command present, received: "));
         serializeJson(commandJson, Serial);
@@ -411,14 +387,8 @@ void loop() {
 
   if (status.targetTemperature == 0) {
     if (status.state != State::IDLE) {
-      logger.debug(
-          F("Target temperature is 0, resetting PID loop and disabling "
-            "heating elements"));
+      logger.debug(F("Target temperature is 0, disabling heating elements"));
       status.state = State::IDLE;
-      topHeatingElementPid.SetMode(QuickPID::Control::manual);
-      topHeatingElementPid.Reset();
-      bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
-      bottomHeatingElementPid.Reset();
       status.topHeatDutyCycle = 0;
       status.bottomHeatDutyCycle = 0;
     }
@@ -427,8 +397,6 @@ void loop() {
         status.currentTemperature > status.targetTemperature &&
         status.currentTemperature - status.targetTemperature > 20) {
       logger.info(F("Started cooling"));
-      topHeatingElementPid.SetMode(QuickPID::Control::manual);
-      bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
       status.topHeatDutyCycle = 0;
       status.bottomHeatDutyCycle = 0;
       status.state = State::COOLING;
@@ -436,21 +404,19 @@ void loop() {
                status.targetTemperature > status.currentTemperature) {
       logger.info(F("Started heating"));
       status.state = State::HEATING;
-      topHeatingElementPid.SetMode(QuickPID::Control::timer);
-      bottomHeatingElementPid.SetMode(QuickPID::Control::timer);
     }
+  }
 
-    if (status.state == State::HEATING) {
-      // only compute when we need it - we're heating
-      computePid();
-    } else if (status.state == State::COOLING) {
-      if (status.isDoorOpen) {
-        noTone(BUZZER_PIN);
-      } else {
+  if (status.state == State::HEATING || status.state == State::IDLE) {
+    // only compute when we need it - we're heating
+    computeMPC();
+  } else if (status.state == State::COOLING) {
+    if (status.isDoorOpen) {
+      noTone(BUZZER_PIN);
+    } else {
 #ifndef DISABLE_BUZZER
-        tone(BUZZER_PIN, ATTENTION_FREQUENCY);
+      tone(BUZZER_PIN, ATTENTION_FREQUENCY);
 #endif
-      }
     }
   }
 
