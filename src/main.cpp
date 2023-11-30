@@ -50,7 +50,7 @@ void immediateStop() {
 }
 
 void sendStatus() {
-  serializeJson(status.toJson(), Serial);
+  status.print();
   Serial.println();
 }
 

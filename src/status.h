@@ -1,7 +1,7 @@
-#include <ArduinoJson.h>
-
 #ifndef REFLOW_TMS_STATUS_H
 #define REFLOW_TMS_STATUS_H
+
+#include <stdint.h>
 
 enum State { IDLE, HEATING, COOLING, FAULT };
 
@@ -15,7 +15,7 @@ public:
   State state = State::IDLE;
   uint8_t error = 0;
 
-  StaticJsonDocument<128> toJson() const;
+  void print() const;
 
 private:
   const char *const stateStrings[4] = {"idle", "heating", "cooling", "fault"};

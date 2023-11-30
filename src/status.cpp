@@ -1,13 +1,21 @@
 #include "status.h"
+#include <HardwareSerial.h>
 
-StaticJsonDocument<128> Status::toJson() const {
-  StaticJsonDocument<128> statusJson;
-  statusJson[F("target")] = targetTemperature;
-  statusJson[F("current")] = currentTemperature;
-  statusJson[F("state")] = stateStrings[state];
-  statusJson[F("top")] = topHeatDutyCycle;
-  statusJson[F("bottom")] = bottomHeatDutyCycle;
-  statusJson[F("door")] = isDoorOpen ? F("open") : F("closed");
-  statusJson[F("error")] = error;
-  return statusJson;
+void Status::print() const {
+  // build JSON without ArduinoJson
+  Serial.print("{\"target\":");
+  Serial.print(targetTemperature);
+  Serial.print(",\"current\":");
+  Serial.print(currentTemperature);
+  Serial.print(R"(,"state":")");
+  Serial.print(stateStrings[state]);
+  Serial.print(R"(","top":)");
+  Serial.print(topHeatDutyCycle);
+  Serial.print(",\"bottom\":");
+  Serial.print(bottomHeatDutyCycle);
+  Serial.print(R"(,"door":")");
+  Serial.print(isDoorOpen ? "open" : "closed");
+  Serial.print(R"(","error":)");
+  Serial.print(error);
+  Serial.println("}");
 }
