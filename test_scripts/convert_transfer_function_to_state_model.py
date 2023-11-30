@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.signal import cont2discrete
 import LinearMPCFactor as lMf
 import control
 
@@ -10,7 +9,7 @@ temperature_bounds = (-20, 270)  # temperatures MPC controller is expected to st
 k = 4.7875771211019
 ω = 0.0027731675792143345
 ξ = 1.54264888649055
-theta = 22.912482438708693  # Delay time in seconds
+
 
 # Sampling time
 Ts = 0.1  # Choose a sampling time appropriate for your system
@@ -52,7 +51,7 @@ max_iter = 1000  # maximum steps of the solver
 mpc.PrintCppCode(e_V, e_g, max_iter)
 
 #######
-
+theta = 22.912482438708693  # Delay time in seconds
 
 # N = 20  # Prediction horizon
 #
