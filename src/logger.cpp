@@ -21,24 +21,24 @@ void Logger::error(const __FlashStringHelper *message) const {
 
 void Logger::log(LogLevel severity, const char *message) const {
   if (severity >= logLevel) {
-    StaticJsonDocument<64> logJson;
-    logJson["time"] = millis();
-    logJson["severity"] = logLevelStrings[severity];
-    logJson["message"] = message;
-
-    serializeJson(logJson, Serial);
+    Serial.print("{\"time\":");
+    Serial.print(millis());
+    Serial.print(R"(,"severity":")");
+    Serial.print(logLevelStrings[severity]);
+    Serial.print(R"(","message":")");
+    Serial.print(message);
     Serial.println();
   }
 }
 
 void Logger::log(LogLevel severity, const __FlashStringHelper *message) const {
   if (severity >= logLevel) {
-    StaticJsonDocument<64> logJson;
-    logJson["time"] = millis();
-    logJson["severity"] = logLevelStrings[severity];
-    logJson["message"] = message;
-
-    serializeJson(logJson, Serial);
+    Serial.print("{\"time\":");
+    Serial.print(millis());
+    Serial.print(R"(,"severity":")");
+    Serial.print(logLevelStrings[severity]);
+    Serial.print(R"(","message":")");
+    Serial.print(message);
     Serial.println();
   }
 }

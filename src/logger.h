@@ -2,7 +2,6 @@
 #define REFLOW_TMS_LOGGER_H
 
 #include <Arduino.h>
-#include <ArduinoJson.h>
 
 enum LogLevel{ DEBUG = 0, INFO = 1, WARN = 2, CRITICAL = 3 };
 
