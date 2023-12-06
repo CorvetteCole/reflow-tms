@@ -7,7 +7,6 @@ enum State { IDLE, HEATING, COOLING, FAULT };
 
 class Status {
 public:
-  float targetTemperature{}; // in degrees Celsius
   float currentTemperature{};
   uint8_t topHeatDutyCycle{};
   uint8_t bottomHeatDutyCycle{};

@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <QuickPID.h>
 #define USE_TIMER_1 true
 #define USING_MICROS_RESOLUTION true
 
@@ -10,6 +9,7 @@
 #include "status.h"
 #include "utils.cpp"
 #include <AVR_Slow_PWM.h>
+
 #include <MAX31865_NonBlocking.h>
 
 // Don't change these numbers to make higher Timer freq. System can hang
@@ -19,19 +19,11 @@ AVR_Slow_PWM heatingElementPwm;
 
 Status status;
 
-float pidCurrentTemperature, pidTargetTemperature, pidTopHeatDutyCycle,
-    pidBottomHeatDutyCycle;
+uint8_t receiveBuffer[INPUT_BUFFER_SIZE];
+uint8_t receiveBufferSize = 0;
 
-char receivedChars[INPUT_BUFFER_SIZE];
 bool newData = false; // represents whether the receivedChars array is ready to
                       // be parsed
-
-QuickPID topHeatingElementPid(&pidCurrentTemperature, &pidTopHeatDutyCycle,
-                              &pidTargetTemperature);
-
-QuickPID bottomHeatingElementPid(&pidCurrentTemperature,
-                                 &pidBottomHeatDutyCycle,
-                                 &pidTargetTemperature);
 
 MAX31865 max31865(10);
 
@@ -39,14 +31,11 @@ Logger logger = Logger(LogLevel::INFO);
 
 void pwmTimerHandler() { heatingElementPwm.run(); }
 
-void immediateStop() {
+void stopHeating() {
   heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
                                      HEATING_ELEMENT_PWM_FREQUENCY, 0);
-
-  status.topHeatDutyCycle = 0;
-  status.bottomHeatDutyCycle = 0;
 }
 
 void sendStatus() {
@@ -60,7 +49,7 @@ void enterErrorState(uint8_t error) {
 #ifndef DISABLE_BUZZER
     tone(BUZZER_PIN, ALARM_FREQUENCY);
 #endif
-    immediateStop();
+    stopHeating();
     status.state = State::FAULT;
 #endif
   }
@@ -108,23 +97,6 @@ void setup() {
                            HEATING_ELEMENT_PWM_FREQUENCY, 0);
   heatingElementPwm.setPWM(BOTTOM_HEATING_ELEMENT_PIN,
                            HEATING_ELEMENT_PWM_FREQUENCY, 0);
-
-  logger.debug(F("Initializing PID..."));
-
-  topHeatingElementPid.SetOutputLimits(0, 100);
-  topHeatingElementPid.SetSampleTimeUs(PID_INTERVAL_MICROS);
-  topHeatingElementPid.SetTunings(
-      TOP_HEATING_ELEMENT_KP, TOP_HEATING_ELEMENT_KI, TOP_HEATING_ELEMENT_KD);
-  topHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
-  topHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
-
-  bottomHeatingElementPid.SetOutputLimits(0, 100);
-  bottomHeatingElementPid.SetSampleTimeUs(PID_INTERVAL_MICROS);
-  bottomHeatingElementPid.SetTunings(BOTTOM_HEATING_ELEMENT_KP,
-                                     BOTTOM_HEATING_ELEMENT_KI,
-                                     BOTTOM_HEATING_ELEMENT_KD);
-  bottomHeatingElementPid.SetProportionalMode(QuickPID::pMode::pOnErrorMeas);
-  bottomHeatingElementPid.SetAntiWindupMode(QuickPID::iAwMode::iAwClamp);
 
   logger.debug(F("Initializing MAX31865_3WIRE..."));
 
@@ -186,50 +158,6 @@ void readTemperature() {
   lastTemperatureRead = millis();
 }
 
-void computePid() {
-  static unsigned long lastPidCompute = 0;
-
-  if (status.state != State::HEATING) {
-    // only compute PID if we are heating, since it is expensive
-    return;
-  }
-
-  // if we are past the PID interval, we should log a warning
-  if (lastPidCompute != 0 &&
-      micros() - lastPidCompute >
-          PID_INTERVAL_MICROS + 1000) { // TODO do we need this +1000?
-    logger.warn(F("PID loop interval too long!"));
-  }
-
-  pidTargetTemperature = status.targetTemperature;
-  pidCurrentTemperature = status.currentTemperature;
-
-  topHeatingElementPid.Compute();
-  bottomHeatingElementPid.Compute();
-  lastPidCompute = micros();
-
-  if (pidTopHeatDutyCycle > 100) {
-    logger.warn(F("PID top heat duty cycle > 100%!"));
-    pidTopHeatDutyCycle = 100;
-  } else if (pidTopHeatDutyCycle < 0) {
-    logger.warn(F("PID top heat duty cycle < 0%!"));
-    pidTopHeatDutyCycle = 0;
-  }
-
-  if (pidBottomHeatDutyCycle > 100) {
-    logger.warn(F("PID bottom heat duty cycle > 100%!"));
-    pidBottomHeatDutyCycle = 100;
-  } else if (pidBottomHeatDutyCycle < 0) {
-    logger.warn(F("PID bottom heat duty cycle < 0%!"));
-    pidBottomHeatDutyCycle = 0;
-  }
-
-  // we can statically cast to uint8_t because the output limits are set
-  // to 0-100
-  status.topHeatDutyCycle = static_cast<uint8_t>(pidTopHeatDutyCycle);
-  status.bottomHeatDutyCycle = static_cast<uint8_t>(pidBottomHeatDutyCycle);
-}
-
 bool receiveCommand() {
   static bool receiveInProgress = false;
 
@@ -243,26 +171,104 @@ bool receiveCommand() {
 
     if (receiveInProgress) {
       if (rc != endMarker) {
-        receivedChars[ndx] = rc;
+        receiveBuffer[ndx] = rc;
         ndx++;
         if (ndx >= INPUT_BUFFER_SIZE) {
           ndx = INPUT_BUFFER_SIZE - 1;
         }
       } else {
-        receivedChars[ndx] = endMarker;
-        ndx++;
-        receivedChars[ndx] = '\0'; // terminate the string
+        receiveBuffer[ndx] = endMarker;
+        receiveBufferSize = ndx + 1;
         receiveInProgress = false;
         ndx = 0;
         return true;
       }
     } else if (rc == startMarker) {
-      receivedChars[ndx] = startMarker;
+      receiveBuffer[ndx] = startMarker;
       ndx++;
       receiveInProgress = true;
     }
   }
   return false;
+}
+
+void handleCommand() {
+  static StaticJsonDocument<32> commandJson;
+
+  // Deserialize the JSON document
+  DeserializationError error =
+      deserializeJson(commandJson, receiveBuffer, receiveBufferSize);
+
+  // Test if parsing succeeds.
+  if (error) {
+    logger.warn(F("deserializeJson() failed"));
+    return;
+  }
+
+  bool commandPresent = false;
+
+  if (commandJson["state"] != nullptr) {
+    commandPresent = true;
+    const char *state = commandJson["state"];
+    if (strcasecmp(state, "IDLE") == 0) {
+      status.state = State::IDLE;
+    } else if (strcasecmp(state, "HEATING") == 0) {
+      status.state = State::HEATING;
+    } else if (strcasecmp(state, "COOLING") == 0) {
+      status.state = State::COOLING;
+    } else {
+      logger.warn(F("Invalid state"));
+    }
+  }
+
+  if (commandJson["top"] != nullptr) {
+    commandPresent = true;
+    uint8_t topHeatDutyCycle = commandJson["top"];
+    if (topHeatDutyCycle < 0 || topHeatDutyCycle > 100) {
+      logger.warn(F("Heat duty cycle must be between 0 and 100"));
+    } else {
+      status.topHeatDutyCycle = topHeatDutyCycle;
+    }
+  }
+
+  if (commandJson["bottom"]) {
+    commandPresent = true;
+    uint8_t bottomHeatDutyCycle = commandJson["bottom"];
+    if (bottomHeatDutyCycle < 0 || bottomHeatDutyCycle > 100) {
+      logger.warn(F("Heat duty cycle must be between 0 and 100"));
+    } else {
+      status.bottomHeatDutyCycle = bottomHeatDutyCycle;
+    }
+  }
+
+  if (commandJson["log"] != nullptr) {
+    commandPresent = true;
+    const char *logLevel = commandJson["log"];
+    if (strcasecmp(logLevel, "DEBUG") == 0) {
+      logger.logLevel = LogLevel::DEBUG;
+    } else if (strcasecmp(logLevel, "INFO") == 0) {
+      logger.logLevel = LogLevel::INFO;
+    } else if (strcasecmp(logLevel, "WARN") == 0) {
+      logger.logLevel = LogLevel::WARN;
+    } else if (strcasecmp(logLevel, "CRITICAL") == 0) {
+      logger.logLevel = LogLevel::CRITICAL;
+    } else {
+      logger.warn(F("Invalid log level"));
+    }
+  }
+
+  if (commandJson["reset"] != nullptr) {
+    logger.warn(F("Resetting..."));
+    resetFunc();
+  }
+
+  if (!commandPresent) {
+    logger.warn(F("No command present, received: "));
+    serializeJson(commandJson, Serial);
+    Serial.println();
+  }
+
+  newData = false;
 }
 
 // TODO: detect current temperature not rising during heating
@@ -275,7 +281,6 @@ void loop() {
   static unsigned long loopTime = 0;
   static unsigned long lastFanToggle = 0;
   static bool isFanOn = false;
-  static StaticJsonDocument<32> commandJson;
 
   loopTime = micros();
 
@@ -302,90 +307,8 @@ void loop() {
 
   //  logger.debug(F("Reading command"));
   if (receiveCommand()) {
+    handleCommand();
     lastUiHeartbeat = millis();
-
-    // Deserialize the JSON document
-    DeserializationError error = deserializeJson(commandJson, receivedChars);
-
-    // Test if parsing succeeds.
-    if (error) {
-      logger.warn((String("Could not parse command: ") + String(error.c_str()) +
-                   String(", '") + String(receivedChars) + String("'"))
-                      .c_str());
-    } else {
-      bool commandPresent = false;
-
-      if (commandJson["target"] != nullptr) {
-        commandPresent = true;
-        float targetTemperature = commandJson["target"];
-        if (targetTemperature != 0 &&
-            targetTemperature < MIN_TARGET_TEMPERATURE) {
-          enterErrorState(ERROR_TARGET_TEMPERATURE_TOO_LOW);
-        } else if (targetTemperature != 0 &&
-                   targetTemperature > MAX_TARGET_TEMPERATURE) {
-          enterErrorState(ERROR_TARGET_TEMPERATURE_TOO_HIGH);
-        } else {
-          status.targetTemperature = targetTemperature;
-        }
-      }
-
-      if (commandJson["log"] != nullptr) {
-        commandPresent = true;
-        const char *logLevel = commandJson["log"];
-        if (strcasecmp(logLevel, "DEBUG") == 0) {
-          logger.logLevel = LogLevel::DEBUG;
-        } else if (strcasecmp(logLevel, "INFO") == 0) {
-          logger.logLevel = LogLevel::INFO;
-        } else if (strcasecmp(logLevel, "WARN") == 0) {
-          logger.logLevel = LogLevel::WARN;
-        } else if (strcasecmp(logLevel, "CRITICAL") == 0) {
-          logger.logLevel = LogLevel::CRITICAL;
-        } else {
-          logger.warn(F("Invalid log level"));
-        }
-      }
-
-      if (commandJson["reset"] != nullptr) {
-        logger.warn(F("Resetting..."));
-        resetFunc();
-      }
-
-      if (commandJson["pid_tune"] != nullptr) {
-        float kp = commandJson["kp"];
-        float ki = commandJson["ki"];
-        float kd = commandJson["kd"];
-        if (commandJson["pid"] == "top") {
-          topHeatingElementPid.SetTunings(kp, ki, kd);
-        } else if (commandJson["pid"] == "bottom") {
-          bottomHeatingElementPid.SetTunings(kp, ki, kd);
-        } else if (commandJson["pid"] == "both") {
-          topHeatingElementPid.SetTunings(kp, ki, kd);
-          bottomHeatingElementPid.SetTunings(kp, ki, kd);
-        } else {
-          logger.warn(F("Invalid PID command"));
-        }
-      }
-
-      if (commandJson["pid_reset"] != nullptr) {
-        if (commandJson["reset_pid"] == "top") {
-          topHeatingElementPid.Reset();
-        } else if (commandJson["reset_pid"] == "bottom") {
-          bottomHeatingElementPid.Reset();
-        } else if (commandJson["reset_pid"] == "both") {
-          topHeatingElementPid.Reset();
-          bottomHeatingElementPid.Reset();
-        } else {
-          logger.warn(F("Invalid PID reset command"));
-        }
-      }
-
-      if (!commandPresent) {
-        logger.warn(F("No command present, received: "));
-        serializeJson(commandJson, Serial);
-        Serial.println();
-      }
-    }
-    newData = false;
   } else if (lastUiHeartbeat != 0 &&
              millis() - lastUiHeartbeat > UI_STALE_THRESHOLD_MILLIS) {
 #ifndef DISABLE_UI_TIMEOUT
@@ -399,74 +322,36 @@ void loop() {
     lastSentStatus = millis();
   }
 
-  if (status.state == State::FAULT) {
-    // make sure heating elements are off
-    if (status.topHeatDutyCycle != 0 || status.bottomHeatDutyCycle != 0) {
-      logger.warn("Heating elements should be off already! Turning off now...");
-      immediateStop();
-      delay(50);
-    }
-    return;
-  }
-
-  if (status.targetTemperature == 0) {
-    if (status.state != State::IDLE) {
-      logger.debug(
-          F("Target temperature is 0, resetting PID loop and disabling "
-            "heating elements"));
-      status.state = State::IDLE;
-      topHeatingElementPid.SetMode(QuickPID::Control::manual);
-      topHeatingElementPid.Reset();
-      bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
-      bottomHeatingElementPid.Reset();
-      status.topHeatDutyCycle = 0;
-      status.bottomHeatDutyCycle = 0;
-    }
-  } else {
-    if (status.state != State::COOLING &&
-        status.currentTemperature > status.targetTemperature &&
-        status.currentTemperature - status.targetTemperature > 10) {
-      logger.info(F("Started cooling"));
-      topHeatingElementPid.SetMode(QuickPID::Control::manual);
-      bottomHeatingElementPid.SetMode(QuickPID::Control::manual);
-      status.topHeatDutyCycle = 0;
-      status.bottomHeatDutyCycle = 0;
-      status.state = State::COOLING;
-    } else if (status.state != State::HEATING &&
-               status.targetTemperature > status.currentTemperature) {
-      logger.info(F("Started heating"));
-      status.state = State::HEATING;
-      topHeatingElementPid.SetMode(QuickPID::Control::timer);
-      bottomHeatingElementPid.SetMode(QuickPID::Control::timer);
-    }
-
-    if (status.state == State::HEATING) {
-      // only compute when we need it - we're heating
-      computePid();
-    } else if (status.state == State::COOLING) {
-      if (status.isDoorOpen) {
-        noTone(BUZZER_PIN);
-      } else {
-#ifndef DISABLE_BUZZER
-        tone(BUZZER_PIN, ATTENTION_FREQUENCY);
-#endif
-      }
-    }
-  }
-
-  if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
-      status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {
-    // set PWM
+  switch (status.state) {
+  case State::HEATING:
+    if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
+        status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {
+      // set PWM
 #ifndef DISABLE_HEATING
-    heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
-                                       HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.topHeatDutyCycle);
-    heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
-                                       HEATING_ELEMENT_PWM_FREQUENCY,
-                                       status.bottomHeatDutyCycle);
+      heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
+                                         HEATING_ELEMENT_PWM_FREQUENCY,
+                                         status.topHeatDutyCycle);
+      heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
+                                         HEATING_ELEMENT_PWM_FREQUENCY,
+                                         status.bottomHeatDutyCycle);
 #endif
-    lastTopHeatDutyCycle = status.topHeatDutyCycle;
-    lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
+      lastTopHeatDutyCycle = status.topHeatDutyCycle;
+      lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
+    }
+    break;
+  case State::COOLING:
+    if (status.isDoorOpen) {
+      noTone(BUZZER_PIN);
+    } else {
+#ifndef DISABLE_BUZZER
+      tone(BUZZER_PIN, ATTENTION_FREQUENCY);
+#endif
+    }
+  case State::IDLE:
+  case State::FAULT:
+    // make sure heating elements are off
+    stopHeating();
+    break;
   }
 
   loopTime = micros() - loopTime;
