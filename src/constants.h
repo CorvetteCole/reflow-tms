@@ -5,7 +5,7 @@
 //#define DISABLE_FAULT_HANDLING
 //#define DISABLE_HEATING
 //#define DISABLE_BUZZER
-#define DISABLE_UI_TIMEOUT
+//#define DISABLE_UI_TIMEOUT
 // ###############################
 
 #define HEATING_ELEMENT_PWM_FREQUENCY 1.0f
