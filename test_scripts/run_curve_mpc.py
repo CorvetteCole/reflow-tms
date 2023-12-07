@@ -245,12 +245,16 @@ def main():
         run_curve()
     except Exception as e:
         print(f'Caught exception {e}')
+        # print stack trace
+        import traceback
+        traceback.print_exc()
         print("Exiting...")
-    send_state(State.IDLE)
-    should_exit.set()
-    heartbeat_thread.join()
-    serial_status_thread.join()
-    ser.close()
+    finally:
+        send_state(State.IDLE)
+        should_exit.set()
+        heartbeat_thread.join()
+        serial_status_thread.join()
+        ser.close()
 
 
 if __name__ == '__main__':
