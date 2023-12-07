@@ -242,7 +242,7 @@ def get_current_state(temperature_data):
 def run_curve():
     global control_pwm, control_state, temperature_data
     peak_hit = False
-    control_state = State.HEATING
+    control_state = State.HEATING.value
     mpc.x0['T'] = status['temperature']
     mpc.x0['dT'] = calculate_temperature_derivative(temperature_data)
     mpc.set_initial_guess()
@@ -254,12 +254,12 @@ def run_curve():
             peak_hit = True
             print(f"Peak temperature of {peak_temp}°C reached at t={duration.seconds}s")
             print(f'Starting cooldown')
-            control_state = State.COOLING
+            control_state = State.COOLING.value
 
         if status['temperature'] <= end_temperatue and peak_hit:
             print(f"End temperature of {end_temperatue}°C reached at t={duration.seconds}s")
             print(f'Ending reflow curve')
-            control_state = State.IDLE
+            control_state = State.IDLE.value
             break
 
         x0 = np.array([[status['temperature']], [calculate_temperature_derivative(temperature_data)]])
@@ -291,7 +291,7 @@ def main():
         traceback.print_exc()
         print("Exiting...")
     finally:
-        control_state = State.IDLE
+        control_state = State.IDLE.value
         should_exit.set()
         serial_process.join()
 
