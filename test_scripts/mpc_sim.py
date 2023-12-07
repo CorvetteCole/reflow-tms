@@ -6,6 +6,18 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from scipy.interpolate import interp1d
 from do_mpc.data import save_results
+from simple_pid import PID
+
+lookahead_s = 120
+t_step = 1
+n_horizon = int(lookahead_s / t_step)
+
+pid_kp = 300
+pid_ki = 0.15
+pid_kd = 150.0
+
+pid = PID(pid_kp, pid_ki, pid_kd, setpoint=25, output_limits=(0, 100), sample_time=t_step,
+          proportional_on_measurement=False, differential_on_measurement=True)
 
 settle_time_s = 60
 
@@ -66,10 +78,6 @@ model.setup()
 mpc = do_mpc.controller.MPC(model)
 mpc.settings.supress_ipopt_output()
 
-lookahead_s = 120
-t_step = 1
-n_horizon = int(lookahead_s / t_step)
-
 setup_mpc = {
     'n_horizon': n_horizon,
     't_step': t_step,
@@ -121,19 +129,27 @@ mpc.bounds['upper', '_x', 'T'] = 270
 mpc.setup()
 
 # Setup Simulator
-simulator = do_mpc.simulator.Simulator(model)
-simulator.set_param(t_step=t_step)
+mpc_simulator = do_mpc.simulator.Simulator(model)
+mpc_simulator.set_param(t_step=t_step)
 
-sim_template = simulator.get_tvp_template()
+pid_simulator = do_mpc.simulator.Simulator(model)
+pid_simulator.set_param(t_step=t_step)
 
-initial_temperature = 22
-initial_derivative = 0.0
+sim_template = mpc_simulator.get_tvp_template()
+
+initial_temperature = 25
+initial_derivative = 0.1
 
 mpc.x0['T'] = initial_temperature  # Set initial temperature for MPC
-simulator.x0['T'] = initial_temperature  # Set initial temperature for the simulator
 mpc.x0['dT'] = initial_derivative  # Set initial temperature derivative for MPC
-simulator.x0['dT'] = initial_derivative  # Set initial temperature derivative for the simulator
-simulator.reset_history()  # Reset any previous simulation history
+
+mpc_simulator.x0['T'] = initial_temperature  # Set initial temperature for the simulator
+mpc_simulator.x0['dT'] = initial_derivative  # Set initial temperature derivative for the simulator
+mpc_simulator.reset_history()  # Reset any previous simulation history
+
+pid_simulator.x0['T'] = initial_temperature  # Set initial temperature for the simulator
+pid_simulator.x0['dT'] = initial_derivative  # Set initial temperature derivative for the simulator
+pid_simulator.reset_history()
 
 mpc.set_initial_guess()  # Set the initial guess for the optimization problem based
 
@@ -143,8 +159,11 @@ def sim_tvp_fun(t_now):
     return sim_template
 
 
-simulator.set_tvp_fun(sim_tvp_fun)
-simulator.setup()
+mpc_simulator.set_tvp_fun(sim_tvp_fun)
+mpc_simulator.setup()
+
+pid_simulator.set_tvp_fun(sim_tvp_fun)
+pid_simulator.setup()
 
 # Initialize the states and inputs
 mpc.x0['T'] = reflow_curve[0, 1]
@@ -191,10 +210,12 @@ shall_lower_bound = reflow_curve[:, 1] - shall_error_margin
 shall_upper_bound = reflow_curve[:, 1] + shall_error_margin
 
 # Plot the error band around the reflow curve
-ax1.fill_between(reflow_curve[:, 0], should_lower_bound, should_upper_bound, color='orange', alpha=0.2, label='Acceptable Temperature Band', zorder=1)
+ax1.fill_between(reflow_curve[:, 0], should_lower_bound, should_upper_bound, color='orange', alpha=0.2,
+                 label='Acceptable Temperature Band', zorder=1)
 
 # Plot the error band around the reflow curve
-ax1.fill_between(reflow_curve[:, 0], shall_lower_bound, shall_upper_bound, color='red', alpha=0.2, label='Target Temperature Band', zorder=2)
+ax1.fill_between(reflow_curve[:, 0], shall_lower_bound, shall_upper_bound, color='red', alpha=0.2,
+                 label='Target Temperature Band', zorder=2)
 
 ax1.set_xlabel('Time [s]')
 ax1.set_ylabel('Temperature [°C]', color='b')
@@ -206,8 +227,10 @@ ax2.tick_params(axis='y', labelcolor='g')
 ax2.set_ylim(0, 100)
 
 # Initialize lines for temperature and control action.
-line1, = ax1.plot([], [], 'b-', label='Temperature', zorder=5)
-line2, = ax2.step([], [], 'g-', label='Control action', where='post', zorder=0)
+mpc_temperature_line, = ax1.plot([], [], 'b-', label='MPC Temperature', zorder=5)
+mpc_control_line, = ax2.step([], [], 'g-', label='MPC control action', where='post', zorder=1)
+pid_temperature_line, = ax1.plot([], [], 'c-', label='PID Temperature', zorder=4, linewidth=1)
+pid_control_line, = ax2.step([], [], color='lime', label='PID control action', where='post', zorder=0, linewidth=1)
 
 plt.title('Reflow Oven Temperature Control')
 fig.tight_layout()  # To ensure the right y-label is not clipped.
@@ -224,29 +247,46 @@ ax1.set_zorder(2)
 ax1.set_frame_on(False)
 
 # Run the control loop and update the plot in each iteration.
-U = []  # Initialize list for control actions.
+mpc_control_actions = []  # Initialize list for control actions.
+pid_control_actions = []
 peak_hit = False
 
 for k in range(n_steps):
     t_now = k * setup_mpc['t_step']
-    u_mpc = mpc.make_step(simulator.x0)
+
+    # set pid setpoint to T_ref
+    pid.setpoint = reflow_curve_function(t_now)
+    u_pid = numpy.array(pid(pid_simulator.x0['T']))
+    # need to be correct dimensions [[]], but sometimes is just the number
+    if u_pid.ndim == 0:
+        u_pid = numpy.array([[u_pid]])
+
+    u_mpc = mpc.make_step(mpc_simulator.x0)
     if t_now > reflow_curve[-1, 0] and peak_hit:
         u_mpc = numpy.array([[0]])
-    U.append(u_mpc[0, 0])  # Extract scalar value from u_mpc
-    simulator.make_step(u_mpc)
+        u_pid = numpy.array([[0]])
+    mpc_control_actions.append(u_mpc[0, 0])  # Extract scalar value from u_mpc
+    mpc_simulator.make_step(u_mpc)
+
+    pid_control_actions.append(u_pid[0, 0])
+    pid_simulator.make_step(u_pid)
 
     # Update the plot.
     mpc_time = np.array(mpc.data['_time'])
     mpc_temp = np.array(mpc.data['_x', 'T']).flatten()
 
-    line1.set_data(mpc_time, mpc_temp)
-    line2.set_data(mpc_time, U)
+    mpc_temperature_line.set_data(mpc_time, mpc_temp)
+    mpc_control_line.set_data(mpc_time, mpc_control_actions)
+
+    pid_temperature_line.set_data(mpc_time, np.array(pid_simulator.data['_x', 'T']).flatten())
+    pid_control_line.set_data(mpc_time, pid_control_actions)
 
     if mpc_temp[-1] > peak_temp and not peak_hit:
         print(f"reflow complete at {mpc_time[-1]}s")
         peak_hit = True
         ax1.plot(mpc_time[-1], mpc_temp[-1], 'ro', label='Peak Temperature', zorder=10)
-        ax1.text(mpc_time[-1] - 20, mpc_temp[-1] + 1, f"{int(mpc_time[-1][0])}/{reflow_curve[-1,0]}s", color='r', zorder=10)
+        ax1.text(mpc_time[-1] - 20, mpc_temp[-1] + 1, f"{int(mpc_time[-1][0])}/{reflow_curve[-1, 0]}s", color='r',
+                 zorder=10)
         # ax1.legend(loc='upper left')
         if 'legend1' in locals():
             legend1.remove()
@@ -254,8 +294,6 @@ for k in range(n_steps):
         legend1.remove()
         legend1.set_zorder(10)
         ax2.add_artist(legend1)
-
-
 
     # Adjust plot limits.
     ax1.set_xlim(0, reflow_curve[-1, 0] + extra_time_s)
