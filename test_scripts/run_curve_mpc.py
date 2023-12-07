@@ -243,7 +243,8 @@ def main():
 
     try:
         run_curve()
-    except:
+    except Exception as e:
+        print(f'Caught exception {e}')
         print("Exiting...")
     send_state(State.IDLE)
     should_exit.set()
