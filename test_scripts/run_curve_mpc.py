@@ -191,8 +191,9 @@ def handle_communication(should_exit, temperature_data, status, control_pwm, con
             current_time = time.monotonic()
             if current_time - last_sent_time > ui_heartbeat_interval_millis / 1000:
                 # Write to serial if PWM value changed or timeout happened
-                control_state_enum = State(control_state.value)
-                if control_state != status['state']:
+
+                if control_state.value != status['state']:
+                    control_state_enum = State(control_state.value)
                     print(f"Sending new state {control_state_enum.name}")
                     ser.write(json.dumps({'state': control_state_enum.name}).encode())
                 if control_pwm.value != status['pwm']:
@@ -227,7 +228,7 @@ def get_current_state(temperature_data):
 def run_curve():
     global control_pwm, control_state, temperature_data
     peak_hit = False
-    control_state = State.HEATING.value
+    control_state.value = State.HEATING.value
     mpc.x0['T'] = status['temperature']
     mpc.x0['dT'] = calculate_temperature_derivative(temperature_data)
     mpc.set_initial_guess()
@@ -239,12 +240,12 @@ def run_curve():
             peak_hit = True
             print(f"Peak temperature of {peak_temp}°C reached at t={duration.seconds}s")
             print(f'Starting cooldown')
-            control_state = State.COOLING.value
+            control_state.value = State.COOLING.value
 
         if status['temperature'] <= end_temperatue and peak_hit:
             print(f"End temperature of {end_temperatue}°C reached at t={duration.seconds}s")
             print(f'Ending reflow curve')
-            control_state = State.IDLE.value
+            control_state.value = State.IDLE.value
             break
 
         x0 = np.array([[status['temperature']], [calculate_temperature_derivative(temperature_data)]])
@@ -276,7 +277,7 @@ def main():
         traceback.print_exc()
         print("Exiting...")
     finally:
-        control_state = State.IDLE.value
+        control_state.value = State.IDLE.value
         should_exit.set()
         serial_process.join()
 
