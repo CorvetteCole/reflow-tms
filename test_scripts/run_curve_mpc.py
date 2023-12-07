@@ -45,7 +45,7 @@ temperature_derivative_timescale = timedelta(seconds=1)
 # convert status dictionary to a shared dictionary with Manager
 status = mgr.dict({
     'temperature': 0,
-    'state': State.IDLE,
+    'state': State.IDLE.value,
     'pwm': 0,
     'door_open': False,
     'error': 0
@@ -197,11 +197,11 @@ def handle_communication(should_exit, temperature_data, status, control_pwm, con
             current_time = time.monotonic()
             if current_time - last_sent_time > ui_heartbeat_interval_millis / 1000:
                 # Write to serial if PWM value changed or timeout happened
-                if control_state_enum != status['state']:
+                control_state_enum = State(control_state.value)
+                if control_state != status['state']:
                     print(f"Sending new state {control_state_enum.name}")
                 if control_pwm.value != status['pwm']:
                     print(f"Sending new pwm {control_pwm.value}")
-                control_state_enum = State(control_state.value)
                 ser.write(json.dumps(
                     {'state': control_state_enum.name, 'top': control_pwm.value, 'bottom': control_pwm.value}).encode())
                 last_sent_time = current_time
