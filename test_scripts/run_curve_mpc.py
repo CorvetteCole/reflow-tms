@@ -263,10 +263,11 @@ def run_curve():
 
         x0 = np.array([[status['temperature']], [calculate_temperature_derivative()]])
         u0 = mpc.make_step(x0)
-        print(f"t={duration.seconds} x0: {u0}")
+        print(f"t={duration.seconds} x0: {x0}")
         if duration.seconds > reflow_curve[-1, 0] and peak_hit:
             u0 = np.array([[0]])
-        control_pwm = u0[0, 0]
+        # clamp to 0-100 integer
+        control_pwm = int(np.clip(u0[0, 0], 0, 100))
         print(f"t={duration.seconds}: {u0}")
         time.sleep(max(0, int(time_step_s - (time.time() - loop_start_time))))
 
