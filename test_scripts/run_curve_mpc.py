@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 import serial
 from enum import Enum
+import traceback
 
 import numpy as np
 from casadi import *
@@ -246,7 +247,6 @@ def main():
     except Exception as e:
         print(f'Caught exception {e}')
         # print stack trace
-        import traceback
         traceback.print_exc()
         print("Exiting...")
     finally:
