@@ -1,8 +1,9 @@
+import copy
 import importlib.util
 import json
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import serial
 from enum import Enum
@@ -35,7 +36,10 @@ class State(Enum):
     FAULT = 'fault'
 
 
-last_status = datetime.now()
+# array of (time, temperature), used for dT
+temperature_data = []
+temperature_derivative_timescale = timedelta(seconds=1)
+
 status = {
     'temperature': 0,
     'state': State.IDLE,
@@ -43,6 +47,7 @@ status = {
     'door_open': False,
     'error': 0
 }
+last_status = status
 
 reflow_curve = np.array([
     [90, 90],
@@ -151,6 +156,7 @@ model, mpc = setup_model_and_mpc()
 
 
 def read_from_serial():
+    global last_status, status
     while should_exit.is_set() is False:
         try:
             serial_lock.acquire()
@@ -162,8 +168,11 @@ def read_from_serial():
                 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
                 with status_lock:
+                    last_status = copy.copy(status)
+
                     if 'current' in data:
                         status['temperature'] = data['current']
+                        temperature_data.append((datetime.now(), data['current']))
                     if 'state' in data:
                         status['state'] = State(data['state'])
                     if 'top' in data:
@@ -174,7 +183,6 @@ def read_from_serial():
                         status['door_open'] = data['door'] == 'open'
                     if 'error' in data:
                         status['error'] = data['error']
-                    last_status = datetime.now()
 
                 if 'current' in data:
                     log_file = log_dir / 'status.log'
@@ -207,6 +215,25 @@ def send_pwm_interval():
         time.sleep(ui_heartbeat_interval_millis / 1000)
 
 
+def calculate_temperature_derivative():
+    one_second_ago = datetime.now() - temperature_derivative_timescale
+
+    global temperature_data
+    temperature_data = [data for data in temperature_data if data[0] > one_second_ago]
+
+    if len(temperature_data) < 2:
+        return 0
+
+        # Calculate the differences and average them.
+    diffs = []
+    for i in range(1, len(temperature_data)):
+        time_diff = (temperature_data[i][0] - temperature_data[i - 1][0]).total_seconds()
+        temp_diff = temperature_data[i][1] - temperature_data[i - 1][1]
+        diffs.append(temp_diff / time_diff)
+
+    return sum(diffs) / len(diffs)
+
+
 def run_curve():
     global control_pwm
     peak_hit = False
@@ -227,7 +254,10 @@ def run_curve():
             send_state(State.IDLE)
             break
 
-        u0 = mpc.make_step(numpy.array([[status['temperature']]]))
+        # need to get temperature and temperature derivative. Temperature is easy... status['temperature']
+        x0 = numpy.array([[status['temperature']], [calculate_temperature_derivative()]])
+        u0 = mpc.make_step(x0)
+        print(f"t={duration.seconds} x0: {u0}")
         if duration.seconds > reflow_curve[-1, 0] and peak_hit:
             u0 = np.array([[0]])
         control_pwm = u0[0, 0]
@@ -241,6 +271,9 @@ def main():
 
     heartbeat_thread = threading.Thread(target=send_pwm_interval)
     heartbeat_thread.start()
+
+    print('Waiting for 5 seconds')
+    time.sleep(5)
 
     try:
         run_curve()
