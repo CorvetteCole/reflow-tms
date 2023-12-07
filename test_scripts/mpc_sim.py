@@ -7,6 +7,8 @@ import matplotlib as mpl
 from scipy.interpolate import interp1d
 from do_mpc.data import save_results
 
+settle_time_s = 60
+
 # Define the reflow curve
 reflow_curve = np.array([
     [90, 90],
@@ -21,7 +23,7 @@ reflow_curve = np.array([
 
 # add 30 seconds @ 35°C to the beginning of the reflow curve, shift the rest accordingly
 reflow_curve = np.vstack((np.array([0, 35]), reflow_curve))
-reflow_curve[:, 0] += 60
+reflow_curve[:, 0] += settle_time_s
 
 reflow_curve_function = interp1d(reflow_curve[:, 0], reflow_curve[:, 1], kind='linear', bounds_error=False,
                                  fill_value='extrapolate')
@@ -85,11 +87,7 @@ tvp_template = mpc.get_tvp_template()
 def tvp_fun(t_now):
     for k in range(n_horizon):
         t = t_now + k * setup_mpc['t_step']
-        if t > reflow_curve[-1, 0]:
-            tvp_template['_tvp', k, 'T_ref'] = reflow_curve_function(reflow_curve[-1, 0])
-        else:
-            tvp_template['_tvp', k, 'T_ref'] = reflow_curve_function(t)
-
+        tvp_template['_tvp', k, 'T_ref'] = reflow_curve_function(t)
     return tvp_template
 
 
@@ -163,8 +161,24 @@ fig, ax1 = plt.subplots(figsize=(16, 9))
 
 ax2 = ax1.twinx()  # Instantiate a second y-axis that shares the same x-axis.
 
+# Generate the time values for which you want to plot the target temperature
+plot_times = np.arange(0, reflow_curve[-1, 0] + extra_time_s + t_step, t_step)
+
+# Initialize an array to hold the target temperatures
+target_temperatures = np.zeros_like(plot_times)
+
+# Evaluate the tvp_fun for each time step
+for i, t_now in enumerate(plot_times):
+    # skip times not in the reflow curve
+    tvp = tvp_fun(t_now)  # This gives us the full horizon, but we just need the first entry
+    target_temperatures[i] = tvp['_tvp', 0, 'T_ref']
+
+# Now plot the target temperatures, which include the decay phase,
+# on top of your current figure setup.
+ax1.plot(plot_times, target_temperatures, label='Internal Reference Curve', color='lightgray', linestyle=':')
+
 # Plot the reflow curve on the primary y-axis.
-ax1.plot(reflow_curve[:, 0], reflow_curve[:, 1], 'r--', label='Reflow Curve')
+ax1.plot(reflow_curve[:, 0], reflow_curve[:, 1], 'r--', label='Original Reflow Curve')
 ax1.set_xlabel('Time [s]')
 ax1.set_ylabel('Temperature [°C]', color='b')
 ax1.tick_params(axis='y', labelcolor='b')
@@ -204,12 +218,13 @@ for k in range(n_steps):
     line1.set_data(mpc_time, mpc_temp)
     line2.set_data(mpc_time, U)
 
-    if mpc_temp[-1] > peak_temp:
+    if mpc_temp[-1] > peak_temp and not peak_hit:
+        print(f"reflow complete at {mpc_time[-1]}s")
         peak_hit = True
 
     # Adjust plot limits.
     ax1.set_xlim(0, reflow_curve[-1, 0] + extra_time_s)
-    ax1.set_ylim(min(reflow_curve[:, 1]) - 25, max(reflow_curve[:, 1]) + 10)
+    ax1.set_ylim(min(reflow_curve[:, 1]) - 25, max(reflow_curve[:, 1]) + 50)
 
     ax2.set_ylim(0, 100)
     fig.canvas.draw()
