@@ -179,6 +179,23 @@ ax1.plot(plot_times, target_temperatures, label='Internal Reference Curve', colo
 
 # Plot the reflow curve on the primary y-axis.
 ax1.plot(reflow_curve[:, 0], reflow_curve[:, 1], 'r--', label='Original Reflow Curve')
+
+should_error_margin = 10  # Define the error margin as 5 degrees Celsius.
+shall_error_margin = 2
+
+# Calculate the lower and upper bounds of the band
+should_lower_bound = reflow_curve[:, 1] - should_error_margin
+should_upper_bound = reflow_curve[:, 1] + should_error_margin
+
+shall_lower_bound = reflow_curve[:, 1] - shall_error_margin
+shall_upper_bound = reflow_curve[:, 1] + shall_error_margin
+
+# Plot the error band around the reflow curve
+ax1.fill_between(reflow_curve[:, 0], should_lower_bound, should_upper_bound, color='orange', alpha=0.2, label='Acceptable Temperature Band', zorder=1)
+
+# Plot the error band around the reflow curve
+ax1.fill_between(reflow_curve[:, 0], shall_lower_bound, shall_upper_bound, color='red', alpha=0.2, label='Target Temperature Band', zorder=2)
+
 ax1.set_xlabel('Time [s]')
 ax1.set_ylabel('Temperature [°C]', color='b')
 ax1.tick_params(axis='y', labelcolor='b')
@@ -189,15 +206,22 @@ ax2.tick_params(axis='y', labelcolor='g')
 ax2.set_ylim(0, 100)
 
 # Initialize lines for temperature and control action.
-line1, = ax1.plot([], [], 'b-', label='Temperature')
-line2, = ax2.step([], [], 'g-', label='Control action', where='post')
+line1, = ax1.plot([], [], 'b-', label='Temperature', zorder=5)
+line2, = ax2.step([], [], 'g-', label='Control action', where='post', zorder=0)
 
 plt.title('Reflow Oven Temperature Control')
 fig.tight_layout()  # To ensure the right y-label is not clipped.
 
 # Prepare legends separately for the two axes.
-ax1.legend(loc='upper left')
+legend1 = ax1.legend(loc='upper left')
+legend1.set_zorder(10)
+legend1.remove()
 ax2.legend(loc='upper right')
+ax2.add_artist(legend1)
+
+ax2.set_zorder(1)
+ax1.set_zorder(2)
+ax1.set_frame_on(False)
 
 # Run the control loop and update the plot in each iteration.
 U = []  # Initialize list for control actions.
@@ -221,12 +245,22 @@ for k in range(n_steps):
     if mpc_temp[-1] > peak_temp and not peak_hit:
         print(f"reflow complete at {mpc_time[-1]}s")
         peak_hit = True
+        ax1.plot(mpc_time[-1], mpc_temp[-1], 'ro', label='Peak Temperature', zorder=10)
+        ax1.text(mpc_time[-1] - 20, mpc_temp[-1] + 1, f"{int(mpc_time[-1][0])}/{reflow_curve[-1,0]}s", color='r', zorder=10)
+        # ax1.legend(loc='upper left')
+        if 'legend1' in locals():
+            legend1.remove()
+        legend1 = ax1.legend(loc='upper left')
+        legend1.remove()
+        legend1.set_zorder(10)
+        ax2.add_artist(legend1)
+
+
 
     # Adjust plot limits.
     ax1.set_xlim(0, reflow_curve[-1, 0] + extra_time_s)
     ax1.set_ylim(min(reflow_curve[:, 1]) - 25, max(reflow_curve[:, 1]) + 50)
 
-    ax2.set_ylim(0, 100)
     fig.canvas.draw()
 
     # Refresh the plot.
