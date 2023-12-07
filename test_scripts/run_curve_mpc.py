@@ -30,22 +30,7 @@ settle_time_s = 60
 mpc_lookahead_s = 120
 time_step_s = 1
 
-
-class State(Enum):
-    IDLE = 0
-    HEATING = 1
-    COOLING = 2
-    FAULT = 3
-
-    # from string
-    @classmethod
-    def from_string(cls, s):
-        # case-insensitive string of name
-        try:
-            return cls[s.upper()]
-        except KeyError:
-            raise ValueError()
-
+from constants import State
 
 # array of (time, temperature), used for dT
 temperature_data = mgr.list()
@@ -172,7 +157,7 @@ def process_serial_line(line, temperature_data, status):
             status['temperature'] = data['current']
             temperature_data.append((datetime.now(), data['current']))
         if 'state' in data:
-            status['state'] = State.from_string(data['state'])
+            status['state'] = State.from_string(data['state']).value
         if 'top' in data:
             status['pwm'] = data['top']
         if 'bottom' in data:
