@@ -211,7 +211,7 @@ def send_state(state):
 def send_pwm_interval():
     # send the target pwm every interval
     while should_exit.is_set() is False:
-        if control_pwm != status['top'] or control_pwm != status['bottom']:
+        if control_pwm != status['pwm']:
             print(f"Sending new pwm {control_pwm}")
         send_target_pwm()
         time.sleep(ui_heartbeat_interval_millis / 1000)
