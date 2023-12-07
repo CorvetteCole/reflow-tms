@@ -227,7 +227,7 @@ def run_curve():
             send_state(State.IDLE)
             break
 
-        u0 = mpc.make_step(numpy.array(status['temperature']))
+        u0 = mpc.make_step(numpy.array([[status['temperature']]]))
         if duration.seconds > reflow_curve[-1, 0] and peak_hit:
             u0 = np.array([[0]])
         control_pwm = u0[0, 0]
