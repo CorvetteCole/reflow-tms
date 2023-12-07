@@ -48,6 +48,8 @@ reflow_curve = np.array([
     [210, 138],
     [240, 165]])
 
+end_temperatue = 138
+
 # add 30 seconds @ 35°C to the beginning of the reflow curve, shift the rest accordingly
 reflow_curve = np.vstack((np.array([0, 35]), reflow_curve))
 reflow_curve[:, 0] += settle_time_s
@@ -216,6 +218,13 @@ def run_curve():
             print(f"Peak temperature of {peak_temp}°C reached at t={duration.seconds}s")
             print(f'Starting cooldown')
             send_state(State.COOLING)
+
+        if status['temperature'] <= end_temperatue and peak_hit:
+            print(f"End temperature of {end_temperatue}°C reached at t={duration.seconds}s")
+            print(f'Ending reflow curve')
+            send_state(State.IDLE)
+            break
+
         u0 = mpc.make_step(numpy.array(status['temperature']))
         if duration.seconds > reflow_curve[-1, 0] and peak_hit:
             u0 = np.array([[0]])
@@ -235,11 +244,11 @@ def main():
         run_curve()
     except:
         print("Exiting...")
-        send_state(State.IDLE)
-        should_exit.set()
-        heartbeat_thread.join()
-        serial_status_thread.join()
-        ser.close()
+    send_state(State.IDLE)
+    should_exit.set()
+    heartbeat_thread.join()
+    serial_status_thread.join()
+    ser.close()
 
 
 if __name__ == '__main__':
