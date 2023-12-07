@@ -234,10 +234,17 @@ def calculate_temperature_derivative():
     return sum(diffs) / len(diffs)
 
 
+def get_current_state():
+    return np.array([[status['temperature']], [calculate_temperature_derivative()]])
+
+
 def run_curve():
     global control_pwm
     peak_hit = False
     send_state(State.HEATING)
+    mpc.x0['T'] = status['temperature']
+    mpc.x0['dT'] = calculate_temperature_derivative()
+    mpc.set_initial_guess()
     start_time = datetime.now()
     while should_exit.is_set() is False:
         duration = datetime.now() - start_time
@@ -254,8 +261,7 @@ def run_curve():
             send_state(State.IDLE)
             break
 
-        # need to get temperature and temperature derivative. Temperature is easy... status['temperature']
-        x0 = numpy.array([[status['temperature']], [calculate_temperature_derivative()]])
+        x0 = np.array([[status['temperature']], [calculate_temperature_derivative()]])
         u0 = mpc.make_step(x0)
         print(f"t={duration.seconds} x0: {u0}")
         if duration.seconds > reflow_curve[-1, 0] and peak_hit:
