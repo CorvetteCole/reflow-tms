@@ -1,6 +1,6 @@
-import copy
 import importlib.util
 import json
+import multiprocessing
 import threading
 import time
 from datetime import datetime, timedelta
@@ -9,45 +9,47 @@ import serial
 from enum import Enum
 import traceback
 
-import numpy as np
 from casadi import *
 import do_mpc
 from scipy.interpolate import interp1d
-import matplotlib.pyplot as plt
 
-should_exit = threading.Event()
-status_lock = threading.Lock()
-serial_lock = threading.Lock()
+should_exit = multiprocessing.Event()
+status_lock = multiprocessing.Lock()
+serial_lock = multiprocessing.Lock()
 
 # Directory for log files
 log_dir = Path(f"test_data/mpc_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}")
 log_dir.mkdir(exist_ok=True, parents=True)
 
-control_pwm = 0
+mgr = multiprocessing.Manager()
+
+control_pwm = mgr.Value('i', 0)
+control_state = mgr.Value('i', 0)
+
 settle_time_s = 60
 mpc_lookahead_s = 120
 time_step_s = 1
 
 
 class State(Enum):
-    IDLE = 'idle'
-    HEATING = 'heating'
-    COOLING = 'cooling'
-    FAULT = 'fault'
+    IDLE = 0
+    HEATING = 1
+    COOLING = 2
+    FAULT = 3
 
 
 # array of (time, temperature), used for dT
-temperature_data = []
+temperature_data = mgr.list()
 temperature_derivative_timescale = timedelta(seconds=1)
 
-status = {
+# convert status dictionary to a shared dictionary with Manager
+status = mgr.dict({
     'temperature': 0,
     'state': State.IDLE,
     'pwm': 0,
     'door_open': False,
     'error': 0
-}
-last_status = status
+})
 
 reflow_curve = np.array([
     [90, 90],
@@ -69,16 +71,13 @@ ui_heartbeat_interval_millis = 500
 
 mpc_horizon = int(mpc_lookahead_s / time_step_s)
 
-# Parameters for the 2nd order transfer function
-k = 4.7875771211019  # 4.2266348441803645
-omega = 0.005328475532226316
-xi = 1.2586207495932575
-
-# Serial port configuration
-ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=1)
-
 
 def setup_model_and_mpc():
+    # Parameters for the 2nd order transfer function
+    k = 4.7875771211019  # 4.2266348441803645
+    omega = 0.005328475532226316
+    xi = 1.2586207495932575
+
     model = do_mpc.model.Model('continuous')
 
     # Define the states (temperature and its derivative)
@@ -155,72 +154,62 @@ def setup_model_and_mpc():
 model, mpc = setup_model_and_mpc()
 
 
-def read_from_serial():
-    global last_status, status
-    while should_exit.is_set() is False:
-        try:
-            serial_lock.acquire()
+def process_serial_line(line, temperature_data, status):
+    try:
+        data = json.loads(line)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if 'current' in data:
+            status['temperature'] = data['current']
+            temperature_data.append((datetime.now(), data['current']))
+        if 'state' in data:
+            status['state'] = State(data['state'])
+        if 'top' in data:
+            status['pwm'] = data['top']
+        if 'bottom' in data:
+            status['pwm'] = data['bottom']
+        if 'door' in data:
+            status['door_open'] = data['door'] == 'open'
+        if 'error' in data:
+            status['error'] = data['error']
+
+        if 'current' in data:
+            log_file = log_dir / 'status.log'
+        else:
+            log_file = log_dir / 'message.log'
+
+        with log_file.open('a') as f:
+            f.write(f"{now} - {line}\n")
+    except json.JSONDecodeError:
+        print("Received non-JSON data")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+def handle_communication(should_exit, temperature_data, status, control_pwm, control_state):
+    with serial.Serial('/dev/ttyUSB0', 115200, timeout=1) as ser:
+        last_sent_time = time.monotonic()
+        while not should_exit.is_set():
+            # Read from serial
             line = ser.readline().decode().strip()
-            serial_lock.release()
             if line:  # Ignore empty lines
-                print(line)  # Print to stdout
-                data = json.loads(line)
-                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                with status_lock:
-                    last_status = copy.copy(status)
-
-                    if 'current' in data:
-                        status['temperature'] = data['current']
-                        temperature_data.append((datetime.now(), data['current']))
-                    if 'state' in data:
-                        status['state'] = State(data['state'])
-                    if 'top' in data:
-                        status['pwm'] = data['top']
-                    if 'bottom' in data:
-                        status['pwm'] = data['bottom']
-                    if 'door' in data:
-                        status['door_open'] = data['door'] == 'open'
-                    if 'error' in data:
-                        status['error'] = data['error']
-
-                if 'current' in data:
-                    log_file = log_dir / 'status.log'
-                else:
-                    log_file = log_dir / 'message.log'
-
-                with log_file.open('a') as f:
-                    f.write(f"{now} - {line}\n")
-
-        except json.JSONDecodeError:
-            print("Received non-JSON data")
-        except Exception as e:
-            print(f"Error: {e}")
+                process_serial_line(line, temperature_data, status)
+            current_time = time.monotonic()
+            if current_time - last_sent_time > ui_heartbeat_interval_millis / 1000:
+                # Write to serial if PWM value changed or timeout happened
+                if control_state_enum != status['state']:
+                    print(f"Sending new state {control_state_enum.name}")
+                if control_pwm.value != status['pwm']:
+                    print(f"Sending new pwm {control_pwm.value}")
+                control_state_enum = State(control_state.value)
+                ser.write(json.dumps(
+                    {'state': control_state_enum.name, 'top': control_pwm.value, 'bottom': control_pwm.value}).encode())
+                last_sent_time = current_time
 
 
-def send_target_pwm():
-    with serial_lock:
-        ser.write(json.dumps({'top': control_pwm, 'bottom': control_pwm}).encode())
-
-
-def send_state(state):
-    with serial_lock:
-        ser.write(json.dumps({'state': state.value}).encode())
-
-
-def send_pwm_interval():
-    # send the target pwm every interval
-    while should_exit.is_set() is False:
-        if control_pwm != status['pwm']:
-            print(f"Sending new pwm {control_pwm}")
-        send_target_pwm()
-        time.sleep(ui_heartbeat_interval_millis / 1000)
-
-
-def calculate_temperature_derivative():
+def calculate_temperature_derivative(temperature_data):
     one_second_ago = datetime.now() - temperature_derivative_timescale
 
-    global temperature_data
     temperature_data = [data for data in temperature_data if data[0] > one_second_ago]
 
     if len(temperature_data) < 2:
@@ -236,16 +225,16 @@ def calculate_temperature_derivative():
     return sum(diffs) / len(diffs)
 
 
-def get_current_state():
-    return np.array([[status['temperature']], [calculate_temperature_derivative()]])
+def get_current_state(temperature_data):
+    return np.array([[status['temperature']], [calculate_temperature_derivative(temperature_data)]])
 
 
 def run_curve():
-    global control_pwm
+    global control_pwm, control_state, temperature_data
     peak_hit = False
-    send_state(State.HEATING)
+    control_state = State.HEATING
     mpc.x0['T'] = status['temperature']
-    mpc.x0['dT'] = calculate_temperature_derivative()
+    mpc.x0['dT'] = calculate_temperature_derivative(temperature_data)
     mpc.set_initial_guess()
     start_time = datetime.now()
     while should_exit.is_set() is False:
@@ -255,15 +244,15 @@ def run_curve():
             peak_hit = True
             print(f"Peak temperature of {peak_temp}°C reached at t={duration.seconds}s")
             print(f'Starting cooldown')
-            send_state(State.COOLING)
+            control_state = State.COOLING
 
         if status['temperature'] <= end_temperatue and peak_hit:
             print(f"End temperature of {end_temperatue}°C reached at t={duration.seconds}s")
             print(f'Ending reflow curve')
-            send_state(State.IDLE)
+            control_state = State.IDLE
             break
 
-        x0 = np.array([[status['temperature']], [calculate_temperature_derivative()]])
+        x0 = np.array([[status['temperature']], [calculate_temperature_derivative(temperature_data)]])
         u0 = mpc.make_step(x0)
         print(f"t={duration.seconds} x0: {x0}")
         if duration.seconds > reflow_curve[-1, 0] and peak_hit:
@@ -275,11 +264,11 @@ def run_curve():
 
 
 def main():
-    serial_status_thread = threading.Thread(target=read_from_serial)
-    serial_status_thread.start()
+    global control_pwm, control_state, temperature_data, should_exit, status
 
-    heartbeat_thread = threading.Thread(target=send_pwm_interval)
-    heartbeat_thread.start()
+    serial_process = multiprocessing.Process(target=handle_communication, args=(should_exit, temperature_data, status,
+                                                                                control_pwm, control_state))
+    serial_process.start()
 
     print('Waiting for 5 seconds')
     time.sleep(5)
@@ -292,11 +281,9 @@ def main():
         traceback.print_exc()
         print("Exiting...")
     finally:
-        send_state(State.IDLE)
+        control_state = State.IDLE
         should_exit.set()
-        heartbeat_thread.join()
-        serial_status_thread.join()
-        ser.close()
+        serial_process.join()
 
 
 if __name__ == '__main__':
