@@ -254,7 +254,7 @@ def run_curve():
         if duration.seconds > reflow_curve[-1, 0] and peak_hit:
             u0 = np.array([[0]])
         # clamp to 0-100 integer
-        control_pwm = int(np.clip(u0[0, 0], 0, 100))
+        control_pwm.value = int(np.clip(u0[0, 0], 0, 100))
         print(f"t={duration.seconds}: {u0}")
         time.sleep(max(0, int(time_step_s - (time.time() - loop_start_time))))
 
