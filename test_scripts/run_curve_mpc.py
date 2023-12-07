@@ -37,6 +37,15 @@ class State(Enum):
     COOLING = 2
     FAULT = 3
 
+    # from string
+    @classmethod
+    def from_string(cls, s):
+        # case-insensitive string of name
+        try:
+            return cls[s.upper()]
+        except KeyError:
+            raise ValueError()
+
 
 # array of (time, temperature), used for dT
 temperature_data = mgr.list()
@@ -163,7 +172,7 @@ def process_serial_line(line, temperature_data, status):
             status['temperature'] = data['current']
             temperature_data.append((datetime.now(), data['current']))
         if 'state' in data:
-            status['state'] = State(data['state'])
+            status['state'] = State.from_string(data['state'])
         if 'top' in data:
             status['pwm'] = data['top']
         if 'bottom' in data:
@@ -200,10 +209,11 @@ def handle_communication(should_exit, temperature_data, status, control_pwm, con
                 control_state_enum = State(control_state.value)
                 if control_state != status['state']:
                     print(f"Sending new state {control_state_enum.name}")
+                    ser.write(json.dumps({'state': control_state_enum.name}).encode())
                 if control_pwm.value != status['pwm']:
                     print(f"Sending new pwm {control_pwm.value}")
                 ser.write(json.dumps(
-                    {'state': control_state_enum.name, 'top': control_pwm.value, 'bottom': control_pwm.value}).encode())
+                    {'top': control_pwm.value, 'bottom': control_pwm.value}).encode())
                 last_sent_time = current_time
 
 
