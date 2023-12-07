@@ -17,7 +17,7 @@ status_lock = threading.Lock()
 serial_lock = threading.Lock()
 
 # Directory for log files
-log_dir = Path(f"test_data/{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}")
+log_dir = Path(f"test_data/mpc_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}")
 log_dir.mkdir(exist_ok=True, parents=True)
 
 control_pwm = 0
