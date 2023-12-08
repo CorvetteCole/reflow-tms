@@ -189,9 +189,8 @@ def handle_communication(should_exit, temperature_data, status, control_pwm, con
             current_time = time.monotonic()
             if current_time - last_sent_time > ui_heartbeat_interval_millis / 1000:
                 # Write to serial if PWM value changed or timeout happened
-
+                control_state_enum = State(control_state.value)
                 if control_state.value != status['state']:
-                    control_state_enum = State(control_state.value)
                     print(f"Sending new state {control_state_enum.name}")
                 if control_pwm.value != status['pwm']:
                     print(f"Sending new pwm {control_pwm.value}")
