@@ -221,23 +221,13 @@ void handleCommand() {
     }
   }
 
-  if (commandJson["top"] != nullptr) {
+  if (commandJson["pwm"] != nullptr) {
     commandPresent = true;
-    uint8_t topHeatDutyCycle = commandJson["top"];
-    if (topHeatDutyCycle < 0 || topHeatDutyCycle > 100) {
+    uint8_t heatDutyCycle = commandJson["pwm"];
+    if (heatDutyCycle > 100) {
       logger.warn(F("Heat duty cycle must be between 0 and 100"));
     } else {
-      status.topHeatDutyCycle = topHeatDutyCycle;
-    }
-  }
-
-  if (commandJson["bottom"]) {
-    commandPresent = true;
-    uint8_t bottomHeatDutyCycle = commandJson["bottom"];
-    if (bottomHeatDutyCycle < 0 || bottomHeatDutyCycle > 100) {
-      logger.warn(F("Heat duty cycle must be between 0 and 100"));
-    } else {
-      status.bottomHeatDutyCycle = bottomHeatDutyCycle;
+      status.heatDutyCycle = heatDutyCycle;
     }
   }
 
@@ -274,8 +264,7 @@ void handleCommand() {
 // TODO: detect current temperature not rising during heating
 // TODO: implement CRC16 checksums for commands
 void loop() {
-  static uint8_t lastTopHeatDutyCycle = 0;
-  static uint8_t lastBottomHeatDutyCycle = 0;
+  static uint8_t lastHeatDutyCycle = 0;
   static unsigned long lastUiHeartbeat = 0;
   static unsigned long lastSentStatus = 0;
   static unsigned long loopTime = 0;
@@ -324,19 +313,17 @@ void loop() {
 
   switch (status.state) {
   case State::HEATING:
-    if (status.topHeatDutyCycle != lastTopHeatDutyCycle ||
-        status.bottomHeatDutyCycle != lastBottomHeatDutyCycle) {
+    if (status.heatDutyCycle != lastHeatDutyCycle) {
       // set PWM
 #ifndef DISABLE_HEATING
       heatingElementPwm.modifyPWMChannel(0, TOP_HEATING_ELEMENT_PIN,
                                          HEATING_ELEMENT_PWM_FREQUENCY,
-                                         status.topHeatDutyCycle);
+                                         status.heatDutyCycle);
       heatingElementPwm.modifyPWMChannel(1, BOTTOM_HEATING_ELEMENT_PIN,
                                          HEATING_ELEMENT_PWM_FREQUENCY,
-                                         status.bottomHeatDutyCycle);
+                                         status.heatDutyCycle);
 #endif
-      lastTopHeatDutyCycle = status.topHeatDutyCycle;
-      lastBottomHeatDutyCycle = status.bottomHeatDutyCycle;
+      lastHeatDutyCycle = status.heatDutyCycle;
     }
     break;
   case State::COOLING:

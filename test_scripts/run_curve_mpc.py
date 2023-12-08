@@ -158,10 +158,8 @@ def process_serial_line(line, temperature_data, status):
             temperature_data.append((datetime.now(), data['current']))
         if 'state' in data:
             status['state'] = State.from_string(data['state']).value
-        if 'top' in data:
-            status['pwm'] = data['top']
-        if 'bottom' in data:
-            status['pwm'] = data['bottom']
+        if 'pwm' in data:
+            status['pwm'] = data['pwm']
         if 'door' in data:
             status['door_open'] = data['door'] == 'open'
         if 'error' in data:
@@ -195,11 +193,10 @@ def handle_communication(should_exit, temperature_data, status, control_pwm, con
                 if control_state.value != status['state']:
                     control_state_enum = State(control_state.value)
                     print(f"Sending new state {control_state_enum.name}")
-                    ser.write(json.dumps({'state': control_state_enum.name}).encode())
                 if control_pwm.value != status['pwm']:
                     print(f"Sending new pwm {control_pwm.value}")
                 ser.write(json.dumps(
-                    {'top': control_pwm.value, 'bottom': control_pwm.value}).encode())
+                    {'state': control_state_enum.name, 'pwm': control_pwm.value}).encode())
                 last_sent_time = current_time
 
 

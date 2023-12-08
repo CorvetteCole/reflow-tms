@@ -8,8 +8,7 @@ enum State { IDLE, HEATING, COOLING, FAULT };
 class Status {
 public:
   float currentTemperature{};
-  uint8_t topHeatDutyCycle{};
-  uint8_t bottomHeatDutyCycle{};
+  uint8_t heatDutyCycle{};
   bool isDoorOpen = false;
   State state = State::IDLE;
   uint8_t error = 0;
