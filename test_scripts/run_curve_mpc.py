@@ -35,7 +35,7 @@ from constants import State
 
 # array of (time, temperature), used for dT
 temperature_data = mgr.list()
-temperature_derivative_timescale = timedelta(seconds=1)
+temperature_derivative_timescale = timedelta(seconds=2)
 
 # convert status dictionary to a shared dictionary with Manager
 status = mgr.dict({
@@ -201,9 +201,9 @@ def handle_communication(should_exit, temperature_data, status, control_pwm, con
 
 
 def calculate_temperature_derivative(temperature_data):
-    one_second_ago = datetime.now() - temperature_derivative_timescale
+    derivatation_time = datetime.now() - temperature_derivative_timescale
 
-    temperature_data = [data for data in temperature_data if data[0] > one_second_ago]
+    temperature_data = [data for data in temperature_data if data[0] > derivatation_time]
 
     if len(temperature_data) < 2:
         return 0
@@ -231,8 +231,8 @@ def prepare_run():
     start_time = datetime.now()
     while not should_exit.is_set():
         duration = datetime.now() - start_time
-        if duration.seconds > 20 and status['temperature'] < 60:
-            print(f'Reached 60°C at t={duration.seconds}s')
+        if duration.seconds > 30 or status['temperature'] > 50:
+            print(f'30 seconds elapsed or temperature reached 50°C, preheat done')
             break
         time.sleep(1)
 
