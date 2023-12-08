@@ -244,7 +244,7 @@ def save_plot(reflow_curve, time_data, temperature_data_list, pwm_data):
     ax1 = plt.subplot(111)
 
     # Plot temperature and PWM data
-    ax1.plot(time_data, temperature_data, 'b-', label='Temperature [°C]')
+    ax1.plot(time_data, temperature_data_list, 'b-', label='Temperature [°C]')
     ax1.set_xlabel('Time [s]')
     ax1.set_ylabel('Temperature [°C]', color='b')
 
@@ -303,8 +303,8 @@ def run_curve():
         control_pwm.value = int(np.clip(u0[0, 0], 0, 100))
         print(f'At t={duration.seconds}s, T={x0[0, 0]}, dT={x0[1, 0]}, pwm={control_pwm.value}')
 
-        time_data.append(duration.seconds)
-        temperature_data_list.append(x0[0, 0])
+        time_data.append(duration.total_seconds())
+        temperature_data_list.append(status['temperature'])
         pwm_data_list.append(control_pwm.value)
         time.sleep(max(0, int(time_step_s - (time.time() - loop_start_time))))
     save_plot(reflow_curve, time_data, temperature_data_list, pwm_data_list)
