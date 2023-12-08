@@ -14,6 +14,8 @@ from casadi import *
 import do_mpc
 from scipy.interpolate import interp1d
 
+from constants import State
+
 should_exit = multiprocessing.Event()
 status_lock = multiprocessing.Lock()
 serial_lock = multiprocessing.Lock()
@@ -27,11 +29,9 @@ mgr = multiprocessing.Manager()
 control_pwm = mgr.Value('i', 0)
 control_state = mgr.Value('i', 0)
 
-settle_time_s = 60
+pre_curve_time_s = 15
 mpc_lookahead_s = 120
 time_step_s = 1
-
-from constants import State
 
 # array of (time, temperature), used for dT
 temperature_data = mgr.list()
@@ -52,11 +52,10 @@ reflow_curve = np.array([
     [210, 138],
     [240, 165]])
 
-end_temperatue = 138
+end_temperature = 138
 
 # add 30 seconds @ 35°C to the beginning of the reflow curve, shift the rest accordingly
-reflow_curve = np.vstack((np.array([0, 35]), reflow_curve))
-reflow_curve[:, 0] += settle_time_s
+reflow_curve[:, 0] += pre_curve_time_s
 peak_temp = max(reflow_curve[:, 1])  # Define what the peak temperature should be
 
 reflow_curve_function = interp1d(reflow_curve[:, 0], reflow_curve[:, 1], kind='linear', bounds_error=False,
@@ -239,8 +238,10 @@ def prepare_run():
     # Wait for door to be closed for at least 10 seconds
     start_time = datetime.now()
     while not should_exit.is_set():
-        duration = datetime.now() - start_time
-        if duration.seconds > 10 and not status['door_open']:
+        if status['door_open']:
+            start_time = datetime.now()
+            continue
+        if (datetime.now() - start_time).seconds > 10:
             print('Oven state settled')
             break
         time.sleep(1)
@@ -267,6 +268,8 @@ def save_plot(reflow_curve, time_data, temperature_data_list, pwm_data):
     ax1.plot(time_data, temperature_data_list, 'b-', label='Temperature [°C]')
     ax1.set_xlabel('Time [s]')
     ax1.set_ylabel('Temperature [°C]', color='b')
+
+    ax1.set_ylim(0, max(reflow_curve[:, 1]) + 50)
 
     # Create a twin axis for the PWM plot
     ax2 = ax1.twinx()
@@ -308,8 +311,8 @@ def run_curve():
             print(f'Starting cooldown')
             control_state.value = State.COOLING.value
 
-        if status['temperature'] <= end_temperatue and peak_hit:
-            print(f"End temperature of {end_temperatue}°C reached at t={duration.seconds}s")
+        if status['temperature'] <= end_temperature and peak_hit:
+            print(f"End temperature of {end_temperature}°C reached at t={duration.seconds}s")
             print(f'Ending reflow curve')
             control_state.value = State.IDLE.value
             break
