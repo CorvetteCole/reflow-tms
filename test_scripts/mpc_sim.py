@@ -19,7 +19,7 @@ pid_kd = 150.0
 pid = PID(pid_kp, pid_ki, pid_kd, setpoint=25, output_limits=(0, 100), sample_time=t_step,
           proportional_on_measurement=False, differential_on_measurement=True)
 
-settle_time_s = 60
+pre_settle_time_s = 15
 
 # Define the reflow curve
 reflow_curve = np.array([
@@ -28,22 +28,22 @@ reflow_curve = np.array([
     [210, 138],
     [240, 165]])
 # reflow_curve = np.array([
-#     [30, 100],
+#     # [30, 100],
 #     [120, 150],
 #     [150, 183],
 #     [210, 235]])
 
 # add 30 seconds @ 35°C to the beginning of the reflow curve, shift the rest accordingly
-reflow_curve = np.vstack((np.array([0, 35]), reflow_curve))
-reflow_curve[:, 0] += settle_time_s
+# reflow_curve = np.vstack((np.array([0, 35]), reflow_curve))
+reflow_curve[:, 0] += pre_settle_time_s
 
 reflow_curve_function = interp1d(reflow_curve[:, 0], reflow_curve[:, 1], kind='linear', bounds_error=False,
                                  fill_value='extrapolate')
 
 # Parameters for the 2nd order transfer function
-k = 4.7875771211019  # 4.2266348441803645
+k = 4.7875771211019
 omega = 0.005328475532226316
-xi = 1.2586207495932575
+xi = 1.54264888649055
 theta = 0  # Assuming no time-delay (e^-theta s) for simplicity
 
 # Set up the MPC problem
@@ -137,8 +137,8 @@ pid_simulator.set_param(t_step=t_step)
 
 sim_template = mpc_simulator.get_tvp_template()
 
-initial_temperature = 25
-initial_derivative = 0.1
+initial_temperature = 45.51749
+initial_derivative = 0.1347846903863636
 
 mpc.x0['T'] = initial_temperature  # Set initial temperature for MPC
 mpc.x0['dT'] = initial_derivative  # Set initial temperature derivative for MPC
@@ -271,6 +271,9 @@ for k in range(n_steps):
     pid_control_actions.append(u_pid[0, 0])
     pid_simulator.make_step(u_pid)
 
+    # print simulator temperature and derivative
+    print(f"t={t_now} MPC: {mpc_simulator.x0['T']}, {mpc_simulator.x0['dT']}")
+
     # Update the plot.
     mpc_time = np.array(mpc.data['_time'])
     mpc_temp = np.array(mpc.data['_x', 'T']).flatten()
@@ -297,7 +300,7 @@ for k in range(n_steps):
 
     # Adjust plot limits.
     ax1.set_xlim(0, reflow_curve[-1, 0] + extra_time_s)
-    ax1.set_ylim(min(reflow_curve[:, 1]) - 25, max(reflow_curve[:, 1]) + 50)
+    ax1.set_ylim(0, max(reflow_curve[:, 1]) + 50)
 
     fig.canvas.draw()
 

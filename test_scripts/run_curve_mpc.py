@@ -68,9 +68,9 @@ mpc_horizon = int(mpc_lookahead_s / time_step_s)
 
 def setup_model_and_mpc():
     # Parameters for the 2nd order transfer function
-    k = 4.7875771211019  # 4.2266348441803645
+    k = 4.7875771211019
     omega = 0.005328475532226316
-    xi = 1.2586207495932575
+    xi = 1.54264888649055
 
     model = do_mpc.model.Model('continuous')
 
