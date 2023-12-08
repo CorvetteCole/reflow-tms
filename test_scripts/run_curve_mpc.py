@@ -222,6 +222,22 @@ def get_current_state(temperature_data):
     return np.array([[status['temperature']], [calculate_temperature_derivative(temperature_data)]])
 
 
+def prepare_run():
+    global control_pwm, control_state, temperature_data
+    # need to run heaters at 100% at least 20 seconds or until oven reaches 60°C
+    print('Preheat started')
+    control_state.value = State.HEATING.value
+    control_pwm.value = 100
+    start_time = datetime.now()
+    while not should_exit.is_set():
+        duration = datetime.now() - start_time
+        if duration.seconds > 20 and status['temperature'] < 60:
+            print(f'Reached 60°C at t={duration.seconds}s')
+            break
+        time.sleep(1)
+    print('Preheat done')
+
+
 def run_curve():
     global control_pwm, control_state, temperature_data
     peak_hit = False
@@ -246,6 +262,7 @@ def run_curve():
             break
 
         x0 = np.array([[status['temperature']], [calculate_temperature_derivative(temperature_data)]])
+        print(f'At t={duration.seconds}s, T={x0[0, 0]}, dT={x0[1, 0]}')
         u0 = mpc.make_step(x0)
         print(f"t={duration.seconds} x0: {x0}")
         if duration.seconds > reflow_curve[-1, 0] and peak_hit:
@@ -267,6 +284,8 @@ def main():
     time.sleep(5)
 
     try:
+        prepare_run()
+        print('Passing control to MPC')
         run_curve()
     except Exception as e:
         print(f'Caught exception {e}')
