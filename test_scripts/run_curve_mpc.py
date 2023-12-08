@@ -168,6 +168,7 @@ def process_serial_line(line, temperature_data, status):
 
         if 'current' in data:
             log_file = log_dir / 'status.log'
+            print(f"{now} - {line}")
         else:
             log_file = log_dir / 'message.log'
 
