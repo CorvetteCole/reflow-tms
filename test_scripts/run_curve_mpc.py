@@ -8,6 +8,7 @@ from pathlib import Path
 import serial
 from enum import Enum
 import traceback
+import matplotlib.pyplot as plt
 
 from casadi import *
 import do_mpc
@@ -18,7 +19,7 @@ status_lock = multiprocessing.Lock()
 serial_lock = multiprocessing.Lock()
 
 # Directory for log files
-log_dir = Path(f"test_data/mpc_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}")
+log_dir = Path(f"test_data/mpc_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
 log_dir.mkdir(exist_ok=True, parents=True)
 
 mgr = multiprocessing.Manager()
@@ -234,11 +235,43 @@ def prepare_run():
             print(f'Reached 60°C at t={duration.seconds}s')
             break
         time.sleep(1)
-    print('Preheat done')
+
+
+def save_plot(reflow_curve, time_data, temperature_data_list, pwm_data):
+    """ Generates a plot for the temperature and PWM data and saves it to a file. """
+    plt.figure(figsize=(16, 9))
+    ax1 = plt.subplot(111)
+
+    # Plot temperature and PWM data
+    ax1.plot(time_data, temperature_data, 'b-', label='Temperature [°C]')
+    ax1.set_xlabel('Time [s]')
+    ax1.set_ylabel('Temperature [°C]', color='b')
+
+    # Create a twin axis for the PWM plot
+    ax2 = ax1.twinx()
+    ax2.step(time_data, pwm_data, 'g-', label='PWM [%]', where='post')
+    ax2.set_ylabel('PWM [%]', color='g')
+
+    # Plot the reflow curve
+    ax1.plot(reflow_curve[:, 0], reflow_curve[:, 1], 'r--', label='Reflow Curve')
+
+    # Plot legends
+    ax1.legend(loc='upper left')
+    ax2.legend(loc='upper right')
+
+    # Save plot to file
+    plt.tight_layout()
+    plt.savefig(log_dir / 'plot.png')
+    plt.close()
 
 
 def run_curve():
     global control_pwm, control_state, temperature_data
+
+    time_data = []
+    temperature_data_list = []
+    pwm_data_list = []
+
     peak_hit = False
     control_state.value = State.HEATING.value
     mpc.x0['T'] = status['temperature']
@@ -261,15 +294,19 @@ def run_curve():
             break
 
         x0 = np.array([[status['temperature']], [calculate_temperature_derivative(temperature_data)]])
-        print(f'At t={duration.seconds}s, T={x0[0, 0]}, dT={x0[1, 0]}')
+
         u0 = mpc.make_step(x0)
-        print(f"t={duration.seconds} x0: {x0}")
         if duration.seconds > reflow_curve[-1, 0] and peak_hit:
             u0 = np.array([[0]])
         # clamp to 0-100 integer
         control_pwm.value = int(np.clip(u0[0, 0], 0, 100))
-        print(f"t={duration.seconds}: {u0}")
+        print(f'At t={duration.seconds}s, T={x0[0, 0]}, dT={x0[1, 0]}, pwm={control_pwm.value}')
+
+        time_data.append(duration.seconds)
+        temperature_data_list.append(x0[0, 0])
+        pwm_data_list.append(control_pwm.value)
         time.sleep(max(0, int(time_step_s - (time.time() - loop_start_time))))
+    save_plot(reflow_curve, time_data, temperature_data_list, pwm_data_list)
 
 
 def main():
