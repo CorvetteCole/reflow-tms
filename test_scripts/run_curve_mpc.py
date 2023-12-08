@@ -225,6 +225,16 @@ def get_current_state(temperature_data):
 
 def prepare_run():
     global control_pwm, control_state, temperature_data
+    # wait until we are below 45°C, and door is closed for at least 10 seconds
+    print('Waiting for cooldown')
+    control_state.value = State.COOLING.value
+    while not should_exit.is_set():
+        if status['temperature'] < 45 and not status['door_open']:
+            print('Cooldown done')
+            break
+        time.sleep(1)
+
+
     # need to run heaters at 100% at least 20 seconds or until oven reaches 60°C
     print('Preheat started')
     control_state.value = State.HEATING.value
