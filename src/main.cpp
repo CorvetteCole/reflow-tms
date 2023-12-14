@@ -317,14 +317,15 @@ void loop() {
     }
     break;
   case State::COOLING:
-    if (status.isDoorOpen) {
-      noTone(BUZZER_PIN);
-    } else {
+    if (!status.isDoorOpen) {
 #ifndef DISABLE_BUZZER
       tone(BUZZER_PIN, ATTENTION_FREQUENCY);
 #endif
     }
   case State::IDLE:
+    if (status.isDoorOpen) {
+      noTone(BUZZER_PIN);
+    }
   case State::FAULT:
     // make sure heating elements are off
     stopHeating();
