@@ -209,15 +209,11 @@ void handleCommand() {
 
   if (commandJson["state"] != nullptr) {
     commandPresent = true;
-    const char *state = commandJson["state"];
-    if (strcasecmp(state, "IDLE") == 0) {
-      status.state = State::IDLE;
-    } else if (strcasecmp(state, "HEATING") == 0) {
-      status.state = State::HEATING;
-    } else if (strcasecmp(state, "COOLING") == 0) {
-      status.state = State::COOLING;
-    } else {
+    int state = commandJson["state"];
+    if (state < 0 || state > 2) {
       logger.warn(F("Invalid state"));
+    } else {
+      status.state = static_cast<State>(state);
     }
   }
 
@@ -233,15 +229,9 @@ void handleCommand() {
 
   if (commandJson["log"] != nullptr) {
     commandPresent = true;
-    const char *logLevel = commandJson["log"];
-    if (strcasecmp(logLevel, "DEBUG") == 0) {
-      logger.logLevel = LogLevel::DEBUG;
-    } else if (strcasecmp(logLevel, "INFO") == 0) {
-      logger.logLevel = LogLevel::INFO;
-    } else if (strcasecmp(logLevel, "WARN") == 0) {
-      logger.logLevel = LogLevel::WARN;
-    } else if (strcasecmp(logLevel, "CRITICAL") == 0) {
-      logger.logLevel = LogLevel::CRITICAL;
+    int logLevel = commandJson["log"];
+    if (0 < logLevel && logLevel < 3) {
+      logger.logLevel = static_cast<LogLevel>(logLevel);
     } else {
       logger.warn(F("Invalid log level"));
     }
