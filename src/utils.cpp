@@ -5,10 +5,6 @@ inline const __FlashStringHelper *ovenErrorToString(uint8_t error) {
   switch (error) {
   case ERROR_DOOR_OPENED_DURING_HEATING:
     return F("Door opened during heating");
-  case ERROR_TARGET_TEMPERATURE_TOO_LOW:
-    return F("Target temperature too low");
-  case ERROR_TARGET_TEMPERATURE_TOO_HIGH:
-    return F("Target temperature too high");
   case ERROR_CURRENT_TEMPERATURE_TOO_LOW:
     return F("Current temperature too low");
   case ERROR_CURRENT_TEMPERATURE_TOO_HIGH:

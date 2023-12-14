@@ -270,18 +270,15 @@ void loop() {
   //  logger.debug(F("Reading temperature"));
   readTemperature();
 
-  if (status.currentTemperature > FAN_ON_TEMPERATURE && !isFanOn &&
-      millis() - lastFanToggle > FAN_DEBOUNCE_THRESHOLD_MILLIS) {
+  if (!isFanOn && status.currentTemperature > FAN_ON_TEMPERATURE) {
     logger.info(F("Turning on fan"));
     digitalWrite(FAN_PIN, HIGH);
     isFanOn = true;
     lastFanToggle = millis();
-  } else if (status.currentTemperature < FAN_ON_TEMPERATURE && isFanOn &&
-             millis() - lastFanToggle > FAN_DEBOUNCE_THRESHOLD_MILLIS) {
+  } else if (isFanOn && status.currentTemperature < FAN_OFF_TEMPERATURE) {
     logger.info(F("Turning off fan"));
     digitalWrite(FAN_PIN, LOW);
     isFanOn = false;
-    lastFanToggle = millis();
   }
 
   //  logger.debug(F("Reading command"));
