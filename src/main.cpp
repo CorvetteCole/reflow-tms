@@ -44,6 +44,9 @@ void sendStatus() {
 }
 
 void enterErrorState(uint8_t error) {
+  if (status.state == State::IDLE) {
+    return;
+  }
   if (status.state != State::FAULT) {
 #ifndef DISABLE_FAULT_HANDLING
 #ifndef DISABLE_BUZZER
